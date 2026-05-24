@@ -1,0 +1,29 @@
+<RCC version="1.0">
+    <qresource prefix="icons">
+        <file alias="keep_off.svg">icons/keep_off.svg</file>
+        <file alias="keep.svg">icons/keep.svg</file>
+        <file alias="pqClip.svg">icons/pqClip.svg</file>
+        <file alias="pqVcrPause.svg">icons/pqVcrPause.svg</file>
+        <file alias="pqVcrPlay.svg">icons/pqVcrPlay.svg</file>
+        <file alias="settings.svg">icons/settings.svg</file>
+    </qresource>
+    <qresource prefix="qml">
+        <file alias="qmldir">../qml/qmldir</file>
+        <file alias="main.qml">../qml/main.qml</file>
+        <file alias="SidePage.qml">../qml/SidePage.qml</file>
+        <file alias="SolutionControl.qml">../qml/SolutionControl.qml</file>
+        <file alias="AnimationControls.qml">../qml/AnimationControls.qml</file>
+        <file alias="TriangleMeshRenderingControls.qml">../qml/TriangleMeshRenderingControls.qml</file>
+        <file alias="TriangleMeshToolsControls.qml">../qml/TriangleMeshToolsControls.qml</file>
+        <file alias="OpenMeshFileDialog.qml">../qml/OpenMeshFileDialog.qml</file>
+        <file alias="ToolbarPage.qml">../qml/ToolbarPage.qml</file>
+        <file alias="partitioning/PartitionList.qml">../qml/partitioning/PartitionList.qml</file>
+         <file alias="meshtools/MeshtoolsList.qml">../qml/meshtools/MeshtoolsList.qml</file>
+    </qresource>
+    <qresource prefix="colormaps">
+        <file alias="color_theme.xml">../Visualization/colormaps/color_theme.xml</file>
+    </qresource>
+    <qresource prefix="textures">
+        <file alias="skybox.jpg">../Visualization/textures/skybox.jpg</file>
+    </qresource>
+</RCC>

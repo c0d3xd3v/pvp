@@ -1,0 +1,6 @@
+module CustomQMLModule
+AnimationControls 1.0 AnimationControls.qml
+DynamicRect 1.0 DynamicRect.qml
+MainPage 1.0 MainPage.qml
+RenderingControl 1.0 RenderingControl.qml
+SolutionControl 1.0 SolutionControl.qml

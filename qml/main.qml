@@ -67,8 +67,7 @@ Window {
 
             // An Python/Backend weiterreichen
             if (typeof MainCtrl !== "undefined") {
-                //MainCtrl.handleDroppedFiles(drop.urls);
-                MainCtrl.loadMesh(drop.urls[0])
+                settingsPane.openFile(drop.urls[0])
             } else {
                 console.warn("❌ MainCtrl nicht verfügbar");
             }

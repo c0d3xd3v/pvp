@@ -20,7 +20,7 @@ GridLayout {
         ToolTip.text: "Ansicht zentrieren"
         ToolTip.delay: 500   // Millisekunden, bis der Tooltip erscheint
         onClicked: function() {
-            MeshCtrl.center_to_geometric_center()
+            SelectionCtrl.center_to_geometric_center()
         }
     }
 }

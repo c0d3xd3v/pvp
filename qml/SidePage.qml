@@ -20,6 +20,10 @@ Item {
 
     OpenMeshFileDialog {id: fileDialog}
 
+    function openFile(url) {
+        fileDialog.openWithPath(url)
+    }
+
     function close() {
         if(!isFixed)
         {
@@ -52,8 +56,8 @@ Item {
     }
 
     // Connect to the Python signal
-    function handleLoadedData() {
-        var hasPointData = false; //MainCtrl.getFunctionNames().length > 0;
+    function handleLoadedData(dataType) {
+        var hasPointData = dataType === "results";
         //console.log("Received signal in QML: meshLoaded")
         //console.log(hasPointData)
 
@@ -74,8 +78,9 @@ Item {
     }
     
     Connections {
+        id: meshLoadedConnection
         target: MainCtrl
-        onMeshLoaded: function(){ handleLoadedData() }
+        onMeshLoaded: function(dataType){ handleLoadedData(dataType) }
     }
 
     SequentialAnimation on width {
@@ -105,6 +110,7 @@ Item {
     Component.onCompleted: function() {
         // close the sidebar on start up.
         console.log("sidebar completed ... ")
+        meshLoadedConnection.target = MainCtrl
         close()
     }
 

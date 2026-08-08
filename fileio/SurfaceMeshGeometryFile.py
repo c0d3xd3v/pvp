@@ -2,8 +2,10 @@ import igl
 import numpy as np
 import locale
 
+from geometry.AbstractMeshData import AbstractGeometryData
 
-class TriangleSurfaceMeshGeometryFile():
+
+class TriangleSurfaceMeshGeometryFile(AbstractGeometryData):
     def __init__(self, path:str):
         self.__path = path
         self.__vertices = None
@@ -33,3 +35,4 @@ class TriangleSurfaceMeshGeometryFile():
 
     def get_triangles(self):
         return self.__triangles
+

@@ -6,7 +6,7 @@ from vtkmodules.util.numpy_support import vtk_to_numpy, numpy_to_vtk
 
 from PySide6.QtCore import QFile
 
-class NgSolveResultActor(vtk.vtkActor):
+class ResultActor(vtk.vtkActor):
     def __init__(self):
         self.dataset = None
         self.__center = (0., 0., 0.)
@@ -136,7 +136,7 @@ class NgSolveResultActor(vtk.vtkActor):
 
     def __setupMapper(self, dataset):
         mapper = vtk.vtkOpenGLPolyDataMapper()
-        mapper.SetInputData(self.pdata)
+        mapper.SetInputConnection(self.prgfilter.GetOutputPort())
         mapper.SetScalarModeToDefault()
         mapper.ScalarVisibilityOn()
         mapper.SetScalarModeToUsePointFieldData()
@@ -176,6 +176,9 @@ class NgSolveResultActor(vtk.vtkActor):
         self.prgfilter.Update()
         self.mapper.Update()
 
+    def updateAnimation(self):
+        self.prgfilter.Modified()
+
     def setAnimationTime(self, t):
         self.time = t
 
@@ -184,12 +187,13 @@ class NgSolveResultActor(vtk.vtkActor):
         pass
 
     def vectorFieldAnimation(self):
-        input_data = self.prgfilter.GetInputDataObject(0, 0)
-        output_data = self.prgfilter.GetOutputDataObject(0)
+        output_data = self.prgfilter.GetPolyDataOutput()
+        output_data.ShallowCopy(self.pdata)
 
-        points = vtk_to_numpy(input_data.GetPoints().GetData())
-        f = vtk_to_numpy(input_data.GetPointData().GetArray(self.function_name))
-        result = points + f*np.cos(self.time*2.0*math.pi)*self.amp
+        points = vtk_to_numpy(self.pdata.GetPoints().GetData())
+        f = vtk_to_numpy(self.pdata.GetPointData().GetArray(self.function_name))
+        result = points + f * np.cos(self.time * 2.0 * math.pi) * self.amp
 
-        result_array_vtk = numpy_to_vtk(result, deep=True)
-        output_data.GetPoints().SetData(result_array_vtk)
+        new_points = vtk.vtkPoints()
+        new_points.SetData(numpy_to_vtk(result, deep=True))
+        output_data.SetPoints(new_points)

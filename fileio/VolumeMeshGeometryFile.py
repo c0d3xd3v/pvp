@@ -2,8 +2,10 @@ import ngsolve as ngs
 import netgen.meshing as nm
 import numpy as np
 
+from geometry.AbstractMeshData import AbstractGeometryData
 
-class TetrahedralVolumeMeshGeometryFile():
+
+class TetrahedralVolumeMeshGeometryFile(AbstractGeometryData):
     '''
     '''
     def __init__(self, path:str):

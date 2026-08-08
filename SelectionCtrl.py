@@ -7,13 +7,17 @@ from PySide6.QtCore import QObject
 from geometry.TriangleMeshGraph import TriangleMeshGraph
 
 
-class MeshCtrl(QObject):
+class SelectionCtrl(QObject):
     update_partition = Signal(list, int)
     mesh_geometry_modified = Signal()
 
     def __init__(self):
         super().__init__()
         self.__surfaceTriangleMeshGraph = None
+        self.__picking_enabled = True
+
+    def set_picking_enabled(self, enabled: bool):
+        self.__picking_enabled = enabled
 
     def load_geometry(self, polydata):
         self.__surfaceTriangleMeshGraph = None
@@ -31,14 +35,8 @@ class MeshCtrl(QObject):
         self.mesh_geometry_modified.emit()
 
     def face_selected(self, face_id):
+        if not self.__picking_enabled:
+            return
         self.__surfaceTriangleMeshGraph.reset()
         flat_faces = self.__surfaceTriangleMeshGraph.BFS(face_id)
         self.update_partition.emit(flat_faces, 0)
-        '''
-        sf = self.face_selection_actor.get_selected_faces()
-        uf = self.face_selection_actor.get_unselected_faces()
-        self.mesh_file.clear_surface_partition()
-        self.mesh_file.add_surface_partition(uf, "fixed")
-        self.mesh_file.add_surface_partition(sf, "default")
-        self.mesh_file.saveNgSolveMesh("test.vol")
-        '''

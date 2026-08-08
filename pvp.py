@@ -26,9 +26,10 @@ if __name__ == "__main__":
     mainctrl.set_cmd_args(sys.argv)
 
     engine.addImportPath(':/qml/')
+    mainctrl.setupContext(engine)
     engine.load('qrc:/qml/main.qml')
 
     toplevel = engine.rootObjects()[0]
-    mainctrl.setupInternal(engine, toplevel.findChild(VTKItem, "vtkitem"))
+    mainctrl.setupInternal(toplevel.findChild(VTKItem, "vtkitem"))
 
     app.exec()

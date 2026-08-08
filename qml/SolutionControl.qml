@@ -3,18 +3,33 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 ColumnLayout {
+    id: solutionRoot
     property bool isVectorValued: false
+    property real animTime: 0
     Layout.fillWidth: true
     Layout.margins: 5
 
+    NumberAnimation {
+        id: numAnim
+        target: solutionRoot
+        property: "animTime"
+        from: 0.0
+        to: 1.0
+        duration: 2000
+        loops: Animation.Infinite
+        running: false
+    }
+
+    onAnimTimeChanged: ResultCtrl.setAnimationTime(animTime)
+
     function updateFunctionList() {
-            comboBox.model = MainCtrl.getFunctionNames()
+            comboBox.model = ResultCtrl.getFunctionNames()
     }
     
     function updateVectorDisplacement() {
         var s = parseFloat(displacementScaling.text)
         var c = switchVectorValued.checked
-        MainCtrl.apply_vector_field_on_position(c, s)
+        ResultCtrl.apply_vector_field_on_position(c, s)
     }
 
     SequentialAnimation {
@@ -42,6 +57,7 @@ ColumnLayout {
         navvc.to = vectorValuedControls.height
         navvc_.to = vectorValuedControls.height - animationControls.height 
         close()
+        updateFunctionList()
         MainCtrl.meshLoaded.connect(updateFunctionList)
     }
     
@@ -57,11 +73,14 @@ ColumnLayout {
             opacity: 0.789
             Layout.fillWidth: true
             onCurrentTextChanged: function() {
-                if(MainCtrl !== undefined && MainCtrl.getFunctionNames().length > 0)
-                    MainCtrl.selectFunctionByName(currentText)
-                    vectorValuedControls.visible = MainCtrl.isCurrentFieldVectorValued()
+                if(MainCtrl !== undefined && ResultCtrl.getFunctionNames().length > 0) {
+                    numAnim.running = false
+                    animationButton.icon.source = "qrc:/icons/pqVcrPlay.svg"
+                    ResultCtrl.selectFunctionByName(currentText)
+                    vectorValuedControls.visible = ResultCtrl.isCurrentFieldVectorValued()
                     if(vectorValuedControls.visible)
                         updateVectorDisplacement()
+                }
             }
         }
     }

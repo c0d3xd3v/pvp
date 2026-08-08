@@ -80,6 +80,11 @@ class PreProcCtrl(QObject):
             self.__scene_ctrl.add_background_geometry(polydata)
         self.sessionChanged.emit()
 
+    @Slot(bool)
+    def setPickingEnabled(self, enabled: bool):
+        if self.__selection_ctrl:
+            self.__selection_ctrl.set_picking_enabled(enabled)
+
     @Slot(result='QVariantList')
     def getMeshRoles(self) -> list:
         result = []

@@ -20,7 +20,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent
 
-        // Mesh roles panel
+        // Mesh roles panel (shared header, above tabs)
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 2
@@ -42,24 +42,44 @@ Item {
                     }
                 }
             }
+        }
 
-            RowLayout {
-                Layout.fillWidth: true
+        TabBar {
+            id: tabBar
+            Layout.fillWidth: true
+            TabButton { text: "Randbedingungen" }
+            TabButton { text: "BG Mesh" }
+        }
+
+        StackLayout {
+            id: tabStack
+            currentIndex: tabBar.currentIndex
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            onCurrentIndexChanged: PreProcCtrl.setPickingEnabled(currentIndex === 0)
+            Component.onCompleted: PreProcCtrl.setPickingEnabled(currentIndex === 0)
+
+            // Tab 1: Surface partitioning (BCs)
+            ColumnLayout {
+                MeshtoolsList {
+                    Layout.fillWidth: true
+                }
+                PartitionList {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
+            }
+
+            // Tab 2: Background mesh
+            ColumnLayout {
                 Button {
-                    text: "BG Mesh"
+                    text: "Create BG Mesh"
                     Layout.fillWidth: true
                     enabled: PreProcCtrl.getMeshRoles()[0].loaded
                     onClicked: PreProcCtrl.createBackgroundMesh()
                 }
+                Item { Layout.fillHeight: true }
             }
-        }
-
-        MeshtoolsList {
-            Layout.fillWidth: true
-        }
-        PartitionList {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
         }
     }
 }

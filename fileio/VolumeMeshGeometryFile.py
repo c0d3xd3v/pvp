@@ -58,6 +58,9 @@ class TetrahedralVolumeMeshGeometryFile(AbstractGeometryData):
     def get_triangles(self):
         return self.__triangles
 
+    def get_tetrahedra(self):
+        return self.__tetraedras
+
     def saveNgSolveMesh(self, file_name):
         # Aufbau der Netgen-Mesh
         mesh = nm.Mesh()

@@ -2,22 +2,51 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Item {
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.topMargin: 5
-        anchors.bottomMargin: 5
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
-        Switch {
-            id: wireframeSwitch
-            opacity: 0.789
-            text: qsTr("show triangle outline")
-            display: AbstractButton.TextOnly
-            Layout.fillWidth: true
-            Layout.columnSpan: 1
-            onCheckedChanged: function() {
-                SceneCtrl.toogleWireframe(checked)
+ColumnLayout {
+    spacing: 2
+
+    Switch {
+        id: wireframeSwitch
+        opacity: 0.789
+        text: qsTr("show triangle outline")
+        display: AbstractButton.TextOnly
+        Layout.fillWidth: true
+        onCheckedChanged: SceneCtrl.toogleWireframe(checked)
+    }
+
+    Switch {
+        id: clipSwitch
+        text: qsTr("clip plane")
+        display: AbstractButton.TextOnly
+        Layout.fillWidth: true
+        onCheckedChanged: SceneCtrl.setClippingEnabled(checked)
+    }
+
+    GridLayout {
+        columns: 3
+        Layout.fillWidth: true
+        visible: clipSwitch.checked
+
+        property string currentAxis: "x"
+
+        Repeater {
+            model: [
+                { label: "+x", axis: "x"  },
+                { label: "−x", axis: "-x" },
+                { label: "+y", axis: "y"  },
+                { label: "−y", axis: "-y" },
+                { label: "+z", axis: "z"  },
+                { label: "−z", axis: "-z" }
+            ]
+            delegate: Button {
+                required property var modelData
+                text: modelData.label
+                Layout.fillWidth: true
+                highlighted: parent.currentAxis === modelData.axis
+                onClicked: {
+                    parent.currentAxis = modelData.axis
+                    SceneCtrl.setClipAxis(modelData.axis)
+                }
             }
         }
     }

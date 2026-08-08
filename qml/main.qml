@@ -31,6 +31,13 @@ Window {
                     mouse.buttons, mouse.modifiers);
             }
 
+            onReleased: function(mouse) {
+                mouse.accepted = true;
+                this.parent.onMouseReleased(
+                    mouse.x, mouse.y, mouse.button,
+                    mouse.buttons, mouse.modifiers);
+            }
+
             onPositionChanged: function(mouse) {
                 this.parent.onMouseMove(mouse.x, mouse.y, mouse.button,
                                         mouse.buttons, mouse.modifiers);

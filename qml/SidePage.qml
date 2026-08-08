@@ -41,7 +41,6 @@ Item {
         if (comp.status === Component.Ready) {
             var controlsComp = comp.createObject(layout, {
                 "Layout.fillWidth": true,
-                "Layout.preferredHeight": comp.implicitHeight || 50,
                 "visible": true
             });
 
@@ -51,7 +50,7 @@ Item {
             return controlsComp;
         } else {
             console.log("Error loading component:", comp.errorString());
-        } 
+        }
         return null;
     }
 

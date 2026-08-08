@@ -45,7 +45,8 @@ class ResultActor(vtk.vtkActor):
 
         self.prgfilter = vtk.vtkProgrammableFilter()
         self.prgfilter.SetInputData(self.pdata)
-        self.time = 1.0
+        self.__scalar_range = [0.0, 1.0]
+        self.time = 0.0
         self.amp = 1.0
         
         self.mapper = self.__setupMapper(self.pdata)
@@ -113,8 +114,13 @@ class ResultActor(vtk.vtkActor):
         f = self.dataset.GetPointData().GetArray(self.function_name)
         real = vtk_to_numpy(f)
         self.isFieldVectorValued = True if f.GetNumberOfComponents() > 1 else False
-        range = [0, np.max(real)] if self.isFieldVectorValued else [np.min(real), np.max(real)] 
-        self.mapper.SetScalarRange(range)
+        if self.isFieldVectorValued:
+            max_abs = np.max(np.linalg.norm(real, axis=1))
+            self.__scalar_range = [0, max_abs]
+        else:
+            max_abs = np.max(np.abs(real))
+            self.__scalar_range = [-max_abs, max_abs]
+        self.mapper.SetScalarRange(self.__scalar_range)
         if self.isFieldVectorValued:
             self.prgfilter.SetExecuteMethod(self.vectorFieldAnimation)
         else:
@@ -183,8 +189,18 @@ class ResultActor(vtk.vtkActor):
         self.time = t
 
     def scalarFieldAnimation(self):
-        print("not implemented")
-        pass
+        output_data = self.prgfilter.GetPolyDataOutput()
+        output_data.ShallowCopy(self.pdata)
+
+        f_orig = vtk_to_numpy(self.pdata.GetPointData().GetArray(self.function_name))
+        scale = np.cos(self.time * 2.0 * math.pi) * self.amp
+
+        animated = (f_orig * scale).astype(f_orig.dtype)
+        animated_vtk = numpy_to_vtk(animated, deep=True)
+        animated_vtk.SetName(self.function_name)
+        output_data.GetPointData().RemoveArray(self.function_name)
+        output_data.GetPointData().AddArray(animated_vtk)
+        output_data.GetPointData().SetActiveScalars(self.function_name)
 
     def vectorFieldAnimation(self):
         output_data = self.prgfilter.GetPolyDataOutput()

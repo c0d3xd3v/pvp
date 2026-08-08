@@ -2,3 +2,6 @@
 *claude*
 *.pyc
 *__pycache__*
+__pycache__/FileIOCtrl.cpython-312.pyc
+__pycache__/MainCtrl.cpython-312.pyc
+__pycache__/SceneCtrl.cpython-312.pyc

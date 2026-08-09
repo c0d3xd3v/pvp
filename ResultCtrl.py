@@ -19,6 +19,10 @@ class ResultCtrl(QObject):
     def load_result(self, data):
         self.__result_data = data
 
+    def clear(self):
+        self.__result_data = None
+        self.__current_field_name = None
+
     @Slot(result='QVariantList')
     def getFunctionNames(self):
         if self.__result_data is None:

@@ -15,6 +15,10 @@ class SelectionCtrl(QObject):
         super().__init__()
         self.__surfaceTriangleMeshGraph = None
         self.__picking_enabled = True
+        self.__scene_ctrl = None
+
+    def set_scene_ctrl(self, scene_ctrl):
+        self.__scene_ctrl = scene_ctrl
 
     def set_picking_enabled(self, enabled: bool):
         self.__picking_enabled = enabled
@@ -37,6 +41,9 @@ class SelectionCtrl(QObject):
     def face_selected(self, face_id):
         if not self.__picking_enabled:
             return
+        pid = self.__scene_ctrl.get_current_partition_id() if self.__scene_ctrl else None
+        if pid is None:
+            return
         self.__surfaceTriangleMeshGraph.reset()
         flat_faces = self.__surfaceTriangleMeshGraph.BFS(face_id)
-        self.update_partition.emit(flat_faces, 0)
+        self.update_partition.emit(flat_faces, pid)

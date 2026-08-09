@@ -9,6 +9,7 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 from Visualization.vtk.ResultActor import ResultActor
 from Visualization.vtk.FaceSelectionActor import FaceSelectionActor
 from Visualization.vtk.PointSetActor import PointSetActor
+from geometry.Partition import Partition
 
 
 _CLIP_NORMALS = {
@@ -16,6 +17,15 @@ _CLIP_NORMALS = {
     "y":  (0, 1, 0), "-y": (0, -1, 0),
     "z":  (0, 0, 1), "-z": (0, 0, -1),
 }
+
+_UNASSIGNED_COLOR = (0.7, 0.7, 0.7)
+# Tab10-ish palette. Wraps around for many partitions.
+_PALETTE = [
+    (0.12, 0.47, 0.71), (1.00, 0.50, 0.05), (0.17, 0.63, 0.17),
+    (0.84, 0.15, 0.16), (0.58, 0.40, 0.74), (0.55, 0.34, 0.29),
+    (0.89, 0.47, 0.76), (0.50, 0.50, 0.50), (0.74, 0.74, 0.13),
+    (0.09, 0.75, 0.81),
+]
 
 
 class SceneCtrl(QObject):
@@ -25,9 +35,12 @@ class SceneCtrl(QObject):
         self.__polydata = None
         self.__actor = None
         self.__result_actor = None
-        self.__partition_id = 1
         self.__points_actor = None
         self.__role_actors: dict[str, vtk.vtkActor] = {}
+        self.__partitions: dict[int, Partition] = {}
+        self.__current_partition_id: int | None = None
+        self.__next_partition_id: int = 1
+        self.partitions_changed_cb = None  # PreProcCtrl injects this
         self.__clip_plane = vtk.vtkPlane()
         self.__clip_plane.SetNormal(1, 0, 0)
         self.__clip_plane.SetOrigin(0, 0, 0)
@@ -39,12 +52,14 @@ class SceneCtrl(QObject):
         self.__volume_clip_filter = None
 
     def __remove_all_actors(self):
-        # Only clears the primary surface/result/points actors.
-        # role_actors (volume, background) have their own lifecycle and persist
-        # across surface reloads.
         for actor in [self.__actor, self.__result_actor, self.__points_actor]:
             if actor is not None:
                 self.__vtkitem.renderer.renderer.RemoveActor(actor)
+        for actor in self.__role_actors.values():
+            self.__vtkitem.renderer.renderer.RemoveActor(actor)
+        self.__role_actors.clear()
+        self.__volume_ug = None
+        self.__volume_clip_filter = None
 
     def __add_role_actor(self, role: str, polydata: vtk.vtkPolyData,
                          color=(0.7, 0.7, 0.7), opacity=0.3, wireframe=True):
@@ -65,6 +80,12 @@ class SceneCtrl(QObject):
         self.__vtkitem.renderer.renderer.AddActor(actor)
         self.__vtkitem.update()
 
+    def clear_result_actor(self):
+        if self.__result_actor is not None:
+            self.__vtkitem.renderer.renderer.RemoveActor(self.__result_actor)
+            self.__result_actor = None
+            self.__vtkitem.update()
+
     def remove_role_actor(self, role: str):
         if role in self.__role_actors:
             self.__vtkitem.renderer.renderer.RemoveActor(self.__role_actors.pop(role))
@@ -76,8 +97,10 @@ class SceneCtrl(QObject):
             self.__result_actor = None
             self.__actor = FaceSelectionActor()
             self.__points_actor = PointSetActor()
-            partitions = [1]*(self.__polydata.GetNumberOfCells())
+            # All cells start as unassigned (partition id 0)
+            partitions = np.zeros(self.__polydata.GetNumberOfCells(), dtype=np.int32)
             self.__actor.setPolyData(self.__polydata, partitions)
+            self.__reset_partitions()
             if self.__clipping_enabled:
                 self.__actor.mapper.AddClippingPlane(self.__clip_plane)
             self.__vtkitem.renderer.renderer.AddActor(self.__actor)
@@ -86,6 +109,67 @@ class SceneCtrl(QObject):
             self.__reposition_clip_widget()
             self.__vtkitem.setSeletableActor(self.__actor)
             self.__vtkitem.update()
+
+    def __reset_partitions(self):
+        self.__partitions.clear()
+        self.__current_partition_id = None
+        self.__next_partition_id = 1
+        self.__sync_lut()
+        self.__notify_partitions_changed()
+
+    def __sync_lut(self):
+        if self.__actor is None:
+            return
+        colors = {0: _UNASSIGNED_COLOR}
+        for pid, p in self.__partitions.items():
+            colors[pid] = p.color
+        self.__actor.set_partition_colors(colors)
+
+    def __notify_partitions_changed(self):
+        if self.partitions_changed_cb is not None:
+            self.partitions_changed_cb()
+
+    def add_partition(self, name: str) -> int:
+        pid = self.__next_partition_id
+        self.__next_partition_id += 1
+        color = _PALETTE[(pid - 1) % len(_PALETTE)]
+        self.__partitions[pid] = Partition(id=pid, name=name, color=color)
+        self.__sync_lut()
+        self.__notify_partitions_changed()
+        return pid
+
+    def delete_partition(self, pid: int):
+        if pid == 0 or pid not in self.__partitions:
+            return
+        # Reassign all cells with this pid back to 0 (unassigned)
+        if self.__actor is not None and self.__actor.full_polydata is not None:
+            from vtkmodules.util.numpy_support import vtk_to_numpy
+            part_arr = self.__actor.full_polydata.GetCellData().GetArray("PartitionIds")
+            if part_arr is not None:
+                part_np = vtk_to_numpy(part_arr)
+                cells = np.where(part_np == pid)[0].tolist()
+                if cells:
+                    self.__actor.updatePartitions(cells, 0)
+        del self.__partitions[pid]
+        if self.__current_partition_id == pid:
+            self.__current_partition_id = None
+        self.__sync_lut()
+        self.__notify_partitions_changed()
+        if self.__vtkitem is not None:
+            self.__vtkitem.update()
+
+    def set_current_partition(self, pid):
+        if pid is None or pid == 0 or pid not in self.__partitions:
+            self.__current_partition_id = None
+        else:
+            self.__current_partition_id = pid
+        self.__notify_partitions_changed()
+
+    def get_current_partition_id(self):
+        return self.__current_partition_id
+
+    def get_partitions(self) -> list[Partition]:
+        return sorted(self.__partitions.values(), key=lambda p: p.id)
 
     def update_scene(self, polydata):
         self.__polydata = polydata

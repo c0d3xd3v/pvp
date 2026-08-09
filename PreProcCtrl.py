@@ -10,6 +10,7 @@ from geometry.AbstractMeshData import AbstractGeometryData
 
 class PreProcCtrl(QObject):
     sessionChanged = Signal()
+    partitionsChanged = Signal()
 
     def __init__(self):
         super().__init__()
@@ -21,6 +22,7 @@ class PreProcCtrl(QObject):
     def set_controllers(self, scene_ctrl, selection_ctrl):
         self.__scene_ctrl = scene_ctrl
         self.__selection_ctrl = selection_ctrl
+        self.__scene_ctrl.partitions_changed_cb = self.partitionsChanged.emit
 
     def get_session(self) -> PreProcSession:
         return self.__session
@@ -29,6 +31,10 @@ class PreProcCtrl(QObject):
     def loadSurface(self, file_path: str):
         self.__fileio_ctrl.load_file(file_path)
         data = self.__fileio_ctrl.get_geometry()
+        # New surface = new geometry: volume/background from a previous
+        # geometry are no longer valid.
+        self.__session.clear(MeshRole.VOLUME)
+        self.__session.clear(MeshRole.BACKGROUND)
         self.__session.set(PreProcMesh(
             role=MeshRole.SURFACE,
             data=data,
@@ -84,6 +90,39 @@ class PreProcCtrl(QObject):
     def setPickingEnabled(self, enabled: bool):
         if self.__selection_ctrl:
             self.__selection_ctrl.set_picking_enabled(enabled)
+
+    @Slot(str, result=int)
+    def createPartition(self, name: str) -> int:
+        if not self.__scene_ctrl or not name.strip():
+            return -1
+        return self.__scene_ctrl.add_partition(name.strip())
+
+    @Slot(int)
+    def deletePartition(self, pid: int):
+        if self.__scene_ctrl:
+            self.__scene_ctrl.delete_partition(pid)
+
+    @Slot(int)
+    def selectPartition(self, pid: int):
+        if self.__scene_ctrl:
+            self.__scene_ctrl.set_current_partition(pid if pid > 0 else None)
+
+    @Slot(result='QVariantList')
+    def getPartitions(self) -> list:
+        if not self.__scene_ctrl:
+            return []
+        current = self.__scene_ctrl.get_current_partition_id()
+        result = []
+        for p in self.__scene_ctrl.get_partitions():
+            r, g, b = p.color
+            hex_color = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
+            result.append({
+                "id": p.id,
+                "name": p.name,
+                "color": hex_color,
+                "selected": p.id == current,
+            })
+        return result
 
     @Slot(result='QVariantList')
     def getMeshRoles(self) -> list:

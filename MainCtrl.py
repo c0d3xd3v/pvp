@@ -32,6 +32,7 @@ class MainCtrl(QObject):
 
         self.__prepoc_ctrl.set_controllers(self.__scene_ctrl, self.__selection_ctrl)
         self.__result_ctrl.set_scene_ctrl(self.__scene_ctrl)
+        self.__selection_ctrl.set_scene_ctrl(self.__scene_ctrl)
         self.__selection_ctrl.update_partition.connect(self.__scene_ctrl.interactive_select)
 
     def get_scene_ctrl(self):
@@ -71,8 +72,14 @@ class MainCtrl(QObject):
             self.__result_ctrl.load_result(data)
             self.meshLoaded.emit("results")
         elif ext in _SURFACE_EXTS:
+            self.__exit_result_mode()
             self.__prepoc_ctrl.loadSurface(file_path)
             self.meshLoaded.emit("geometry")
         elif ext in _VOLUME_EXTS:
+            self.__exit_result_mode()
             self.__prepoc_ctrl.loadVolume(file_path)
             self.meshLoaded.emit("geometry")
+
+    def __exit_result_mode(self):
+        self.__scene_ctrl.clear_result_actor()
+        self.__result_ctrl.clear()

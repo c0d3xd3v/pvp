@@ -3,8 +3,14 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 Item {
-    ListModel {
-        id: listModel
+    id: partitionsRoot
+
+    property var partitions: PreProcCtrl.getPartitions()
+
+    Connections {
+        target: PreProcCtrl
+        function onPartitionsChanged() { partitionsRoot.partitions = PreProcCtrl.getPartitions() }
+        function onSessionChanged()    { partitionsRoot.partitions = PreProcCtrl.getPartitions() }
     }
 
     ColumnLayout {
@@ -13,48 +19,76 @@ Item {
         anchors.bottomMargin: 5
         anchors.leftMargin: 5
         anchors.rightMargin: 5
-        
-        // Eingabezeile
+
         RowLayout {
             Layout.fillWidth: true
             TextField {
                 id: inputField
-                placeholderText: "Neuen Eintrag ..."
+                placeholderText: "Neuer Randbedingungs-Name ..."
                 Layout.fillWidth: true
-                onAccepted: addItem()
+                onAccepted: addPartition()
             }
             Button {
                 text: "+"
-                onClicked: addItem()
+                enabled: inputField.text.trim() !== ""
+                onClicked: addPartition()
             }
         }
 
-        // Scrollbare Liste
         ListView {
             Layout.fillWidth: true
-            Layout.fillHeight: true   // nimmt den gesamten verbleibenden Platz
-            model: listModel
+            Layout.fillHeight: true
+            model: partitionsRoot.partitions
             clip: true
             spacing: 2
 
             delegate: Rectangle {
+                required property var modelData
+                required property int index
                 width: ListView.view.width
-                height: 50
-                color: index % 2 === 0 ? "#f8f8f8" : "#ffffff"
-                border.color: "#ddd"
+                height: 40
+                color: modelData.selected ? "#cfe2ff"
+                     : (index % 2 === 0 ? "#f8f8f8" : "#ffffff")
+                border.color: modelData.selected ? "#0d6efd" : "#ddd"
+                border.width: modelData.selected ? 2 : 1
+
+                // Declared BEFORE the RowLayout so it sits underneath — the delete
+                // Button gets its own clicks; clicks on empty row area fall through here.
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        if (modelData.selected) {
+                            PreProcCtrl.selectPartition(-1)
+                        } else {
+                            PreProcCtrl.selectPartition(modelData.id)
+                        }
+                    }
+                }
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 8
+                    anchors.margins: 6
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
+                        radius: 3
+                        color: modelData.color
+                        border.color: "#666"
+                        border.width: 1
+                    }
                     Text {
-                        text: model.itemText
-                        font.pixelSize: 16
+                        text: modelData.name
+                        font.pixelSize: 14
                         Layout.fillWidth: true
                         verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
                     }
                     Button {
-                        text: "delete"
-                        onClicked: listModel.remove(index)
+                        text: "×"
+                        implicitWidth: 32
+                        onClicked: PreProcCtrl.deletePartition(modelData.id)
                     }
                 }
             }
@@ -62,11 +96,10 @@ Item {
         }
     }
 
-    function addItem() {
-        let newText = inputField.text.trim()
-        if (newText !== "") {
-            listModel.append({ "itemText": newText })
-            inputField.clear()
-        }
+    function addPartition() {
+        let name = inputField.text.trim()
+        if (name === "") return
+        PreProcCtrl.createPartition(name)
+        inputField.clear()
     }
 }

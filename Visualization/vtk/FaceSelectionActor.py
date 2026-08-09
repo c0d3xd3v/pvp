@@ -28,14 +28,8 @@ class FaceSelectionActor(vtk.vtkActor):
         if partition_ids is not None:
             self._add_partition_array(partition_ids)
 
-        # ---- Determine max ID for LUT ----
-        num_cells = self.full_polydata.GetNumberOfCells()
-        max_id = num_cells - 1                     # OriginalIds go from 0..num_cells-1
-        if partition_ids is not None and len(partition_ids) > 0:
-            max_id = max(max_id, np.max(partition_ids))
-
-        # ---- Create LUT covering the whole range ----
-        self._create_lut(max_id + 1)
+        # ---- Start with LUT that only knows unassigned (0=grey). SceneCtrl syncs it. ----
+        self.set_partition_colors({0: (0.7, 0.7, 0.7)})
 
         # ---- Start with cell mode ----
         self.setColorMode("partition")
@@ -86,14 +80,20 @@ class FaceSelectionActor(vtk.vtkActor):
             # Falls nicht, reicht ein simples Update des Mappers:
             self.mapper.Modified()
 
-    def _create_lut(self, num_entries):
+    def set_partition_colors(self, colors: dict):
+        """Rebuild LUT so lut[pid] == colors[pid]. Missing IDs get grey."""
+        num_entries = max(colors.keys()) + 1 if colors else 1
         self.lut = vtk.vtkLookupTable()
         self.lut.SetNumberOfTableValues(num_entries)
         self.lut.SetRange(0, num_entries - 1)
         self.lut.Build()
         for i in range(num_entries):
-            r, g, b = np.random.random(3)
+            r, g, b = colors.get(i, (0.7, 0.7, 0.7))
             self.lut.SetTableValue(i, r, g, b, 1.0)
+        if self.current_mode == "partition" and self.full_polydata is not None:
+            self.mapper.SetLookupTable(self.lut)
+            self.mapper.SetScalarRange(0, num_entries - 1)
+            self.mapper.Modified()
 
     def setColorMode(self, mode: str):
         """mode = 'cell' (OriginalIds) or 'partition' (PartitionIds)"""

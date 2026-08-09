@@ -192,7 +192,10 @@ class ResultActor(vtk.vtkActor):
         output_data = self.prgfilter.GetPolyDataOutput()
         output_data.ShallowCopy(self.pdata)
 
-        f_orig = vtk_to_numpy(self.pdata.GetPointData().GetArray(self.function_name))
+        field = self.pdata.GetPointData().GetArray(self.function_name)
+        if field is None:
+            return
+        f_orig = vtk_to_numpy(field)
         scale = np.cos(self.time * 2.0 * math.pi) * self.amp
 
         animated = (f_orig * scale).astype(f_orig.dtype)
@@ -206,8 +209,12 @@ class ResultActor(vtk.vtkActor):
         output_data = self.prgfilter.GetPolyDataOutput()
         output_data.ShallowCopy(self.pdata)
 
-        points = vtk_to_numpy(self.pdata.GetPoints().GetData())
-        f = vtk_to_numpy(self.pdata.GetPointData().GetArray(self.function_name))
+        pts = self.pdata.GetPoints()
+        field = self.pdata.GetPointData().GetArray(self.function_name)
+        if pts is None or field is None:
+            return
+        points = vtk_to_numpy(pts.GetData())
+        f = vtk_to_numpy(field)
         result = points + f * np.cos(self.time * 2.0 * math.pi) * self.amp
 
         new_points = vtk.vtkPoints()

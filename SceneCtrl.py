@@ -171,6 +171,24 @@ class SceneCtrl(QObject):
     def get_partitions(self) -> list[Partition]:
         return sorted(self.__partitions.values(), key=lambda p: p.id)
 
+    def assign_faces_to_partition(self, face_ids, pid: int):
+        """Bulk-assign cell indices to an existing partition."""
+        if self.__actor is None or pid not in self.__partitions or not face_ids:
+            return
+        self.__actor.updatePartitions(face_ids, pid)
+        if self.__vtkitem is not None:
+            self.__vtkitem.update()
+
+    def get_partition_ids_per_cell(self):
+        """Return numpy array of PartitionIds per cell, or None if no surface loaded."""
+        if self.__actor is None or self.__actor.full_polydata is None:
+            return None
+        from vtkmodules.util.numpy_support import vtk_to_numpy
+        arr = self.__actor.full_polydata.GetCellData().GetArray("PartitionIds")
+        if arr is None:
+            return None
+        return vtk_to_numpy(arr).copy()
+
     def update_scene(self, polydata):
         self.__polydata = polydata
         partitions = [1]*(self.__polydata.GetNumberOfCells())

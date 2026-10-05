@@ -1,49 +1,80 @@
 import os
+import shutil
 import subprocess
 import sys
+import sysconfig
 from setuptools import setup
 from setuptools.command.build_ext import build_ext
 from setuptools.extension import Extension
-import sysconfig
 
 
-# Dein Git-Repository mit dem C++-Code
-GIT_REPO = "https://gitlab.com/c0d3xd3v/manifold-harmonic-neural-operator.git"
-GIT_DIR = "mhno"
+class CMakeExtension(Extension):
+    def __init__(self, name, cmake_source_dir, build_subdir=None,
+                 install_subdir="", git_repo=None, git_dir=None,
+                 install_component=None):
+        super().__init__(name, sources=[])
+        self.cmake_source_dir  = cmake_source_dir  # dir containing CMakeLists.txt (relative to repo root)
+        self.build_subdir      = build_subdir or f"{cmake_source_dir}/build"
+        self.install_subdir    = install_subdir  # subdir under site-packages ("" = directly there)
+        self.git_repo          = git_repo        # if set + git_dir missing → clone before build
+        self.git_dir           = git_dir
+        self.install_component = install_component  # limit `cmake --install` to this component
+
 
 class CMakeBuild(build_ext):
-    def run(self):        
-        # Klone das Repository, falls es nicht existiert
-        if not os.path.exists(GIT_DIR):
-            subprocess.check_call(["git", "clone", GIT_REPO, GIT_DIR])
+    def run(self):
+        for ext in self.extensions:
+            if ext.git_repo and ext.git_dir and not os.path.exists(ext.git_dir):
+                subprocess.check_call(["git", "clone", ext.git_repo, ext.git_dir])
         super().run()
 
     def build_extension(self, ext):
-        build_temp = GIT_DIR + "/build" # self.build_temp
-        sourcedir = os.path.abspath(os.path.dirname(__file__))
-        
-        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+        repo_root  = os.path.abspath(os.path.dirname(__file__))
+        src_dir    = os.path.abspath(os.path.join(repo_root, ext.cmake_source_dir))
+        build_dir  = os.path.abspath(os.path.join(repo_root, ext.build_subdir))
+        purelib    = sysconfig.get_paths()["purelib"]
+        install_prefix = os.path.join(purelib, ext.install_subdir) if ext.install_subdir else purelib
 
-        install_dir = sysconfig.get_paths()["purelib"]
-        print(f"Standard-Installationspfad: {install_dir}")
+        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
 
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
-            f"-DCMAKE_INSTALL_PREFIX={install_dir+"/"+GIT_DIR}"
+            f"-DCMAKE_INSTALL_PREFIX={install_prefix}",
         ]
 
-        os.makedirs(build_temp, exist_ok=True)
+        os.makedirs(build_dir, exist_ok=True)
+        subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=build_dir)
+        subprocess.check_call(["cmake", "--build", ".",
+                               "-j", str(os.cpu_count() or 1)], cwd=build_dir)
+        install_cmd = ["cmake", "--install", "."]
+        if ext.install_component:
+            install_cmd += ["--component", ext.install_component]
+        subprocess.check_call(install_cmd, cwd=build_dir)
 
-        # CMake ausführen
-        subprocess.check_call(["cmake", sourcedir + "/" + GIT_DIR + "/src/point_cloud_tools/" ] + cmake_args, cwd=build_temp)
-        subprocess.check_call(["cmake", "--build", ".", "--target", "install" ], cwd=build_temp)
+        # cmake installs the .so with a plain name (e.g. pyFooBar.so). Setuptools'
+        # editable-install flow then looks for an ABI-tagged copy in extdir
+        # (e.g. pyFooBar.cpython-312-x86_64-linux-gnu.so). Stage a copy there
+        # so setuptools' post-build check succeeds.
+        ext_suffix = sysconfig.get_config_var("EXT_SUFFIX") or ".so"
+        src_so = os.path.join(install_prefix, f"{ext.name}.so")
+        if os.path.exists(src_so):
+            os.makedirs(extdir, exist_ok=True)
+            dst_so = os.path.join(extdir, f"{ext.name}{ext_suffix}")
+            shutil.copy2(src_so, dst_so)
+
 
 setup(
-    name="mhno",
+    name="pvp",
     version="0.1",
     author="K4!",
-    ext_modules=[Extension("mhno", [])],  # Keine direkte C++-Datei, CMake baut es
+    ext_modules=[
+        CMakeExtension(
+            "pyFloatTetwildWrapper",
+            cmake_source_dir="external/floattetwild-wrapper",
+            install_component="pyfloattetwildwrapper",
+        ),
+    ],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
 )

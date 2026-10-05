@@ -10,6 +10,7 @@ from SelectionCtrl import SelectionCtrl
 from SceneCtrl import SceneCtrl
 from PreProcCtrl import PreProcCtrl
 from ResultCtrl import ResultCtrl
+from MeshingCtrl import MeshingCtrl
 from FileIOCtrl import FileIOCtrl
 from geometry.AbstractMeshData import AbstractResultData
 from qml.vtk.VTKItem import VTKItem
@@ -24,15 +25,17 @@ class MainCtrl(QObject):
 
     def __init__(self):
         super().__init__()
-        self.__fileio_ctrl   = FileIOCtrl()
+        self.__fileio_ctrl    = FileIOCtrl()
         self.__selection_ctrl = SelectionCtrl()
-        self.__scene_ctrl    = SceneCtrl()
-        self.__prepoc_ctrl   = PreProcCtrl()
-        self.__result_ctrl   = ResultCtrl()
+        self.__scene_ctrl     = SceneCtrl()
+        self.__prepoc_ctrl    = PreProcCtrl()
+        self.__result_ctrl    = ResultCtrl()
+        self.__meshing_ctrl   = MeshingCtrl()
 
         self.__prepoc_ctrl.set_controllers(self.__scene_ctrl, self.__selection_ctrl)
         self.__result_ctrl.set_scene_ctrl(self.__scene_ctrl)
         self.__selection_ctrl.set_scene_ctrl(self.__scene_ctrl)
+        self.__meshing_ctrl.set_controllers(self.__prepoc_ctrl, self.__scene_ctrl)
         self.__selection_ctrl.update_partition.connect(self.__scene_ctrl.interactive_select)
 
     def get_scene_ctrl(self):
@@ -54,6 +57,7 @@ class MainCtrl(QObject):
         ctxt.setContextProperty("SelectionCtrl", self.__selection_ctrl)
         ctxt.setContextProperty("PreProcCtrl", self.__prepoc_ctrl)
         ctxt.setContextProperty("ResultCtrl", self.__result_ctrl)
+        ctxt.setContextProperty("MeshingCtrl", self.__meshing_ctrl)
 
     def setupInternal(self, item: VTKItem):
         self.__scene_ctrl.set_vtk_item(item)

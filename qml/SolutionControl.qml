@@ -64,13 +64,11 @@ ColumnLayout {
     RowLayout {
         id: dieseRow
         Label {
-            opacity: 0.789
             text: qsTr("Gridfunction")
             Layout.preferredWidth: implicitWidth
         }
         ComboBox {
             id: comboBox
-            opacity: 0.789
             Layout.fillWidth: true
             onCurrentTextChanged: function() {
                 if(MainCtrl !== undefined && ResultCtrl.getFunctionNames().length > 0) {
@@ -93,7 +91,6 @@ ColumnLayout {
         RowLayout {
             spacing: 1
             Label {
-                opacity: 0.789
                 text: qsTr("displacement")
                 Layout.preferredWidth: implicitWidth
                 Layout.margins: 0
@@ -127,16 +124,14 @@ ColumnLayout {
                 }
             }
             Label {
-                opacity: 0.789
                 text: qsTr("scale")
                 Layout.fillWidth: false
                 enabled: displacementScaling.enabled
             }
             TextField {
                 id: displacementScaling
-                opacity: 0.789
                 Layout.fillWidth: true
-                placeholderText: qsTr("Text Field")
+                placeholderText: ""
                 text: "1.0"
                 validator: DoubleValidator {
                     bottom: 1.0

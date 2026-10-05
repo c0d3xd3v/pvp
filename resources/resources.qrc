@@ -6,6 +6,7 @@
         <file alias="pqVcrPause.svg">icons/pqVcrPause.svg</file>
         <file alias="pqVcrPlay.svg">icons/pqVcrPlay.svg</file>
         <file alias="settings.svg">icons/settings.svg</file>
+        <file alias="export.svg">icons/export.svg</file>
     </qresource>
     <qresource prefix="qml">
         <file alias="qmldir">../qml/qmldir</file>
@@ -16,6 +17,7 @@
         <file alias="TriangleMeshRenderingControls.qml">../qml/TriangleMeshRenderingControls.qml</file>
         <file alias="TriangleMeshToolsControls.qml">../qml/TriangleMeshToolsControls.qml</file>
         <file alias="OpenMeshFileDialog.qml">../qml/OpenMeshFileDialog.qml</file>
+        <file alias="ExportDialog.qml">../qml/ExportDialog.qml</file>
         <file alias="ToolbarPage.qml">../qml/ToolbarPage.qml</file>
         <file alias="partitioning/PartitionList.qml">../qml/partitioning/PartitionList.qml</file>
          <file alias="meshtools/MeshtoolsList.qml">../qml/meshtools/MeshtoolsList.qml</file>

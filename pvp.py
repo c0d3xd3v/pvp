@@ -5,10 +5,18 @@ os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
-from PySide6.QtCore    import Qt
-from PySide6.QtGui     import QGuiApplication
-from PySide6.QtWidgets import QApplication
-from PySide6.QtQml     import QQmlApplicationEngine
+# Material Dark theme for all QtQuick.Controls widgets
+os.environ["QT_QUICK_CONTROLS_MATERIAL_THEME"]   = "Dark"
+os.environ["QT_QUICK_CONTROLS_MATERIAL_ACCENT"]  = "Teal"
+os.environ["QT_QUICK_CONTROLS_MATERIAL_PRIMARY"] = "BlueGrey"
+# Dense = desktop-sized controls (default Material sizing is touch-oriented)
+os.environ["QT_QUICK_CONTROLS_MATERIAL_VARIANT"] = "Dense"
+
+from PySide6.QtCore            import Qt
+from PySide6.QtGui             import QGuiApplication
+from PySide6.QtWidgets         import QApplication
+from PySide6.QtQml             import QQmlApplicationEngine
+from PySide6.QtQuickControls2  import QQuickStyle
 
 from MainCtrl          import MainCtrl
 from qml.vtk.VTKItem   import VTKItem
@@ -20,6 +28,7 @@ if __name__ == "__main__":
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(QHPT)
 
     app = QApplication()
+    QQuickStyle.setStyle("Material")
     engine = QQmlApplicationEngine()
     mainctrl = MainCtrl()
 

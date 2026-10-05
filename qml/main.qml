@@ -3,11 +3,14 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QmlVtk 1.0
 
-Window {
+ApplicationWindow {
     id: appWindow
     width: 600
     height: 600
     visible: true
+    // Compact Material controls: Material defaults are touch-sized; this makes
+    // them more desktop-friendly. All child controls inherit the font.
+    font.pixelSize: 12
 
     VTKItem {
         id: vtkitem
@@ -52,39 +55,39 @@ Window {
 
     }
 
-    // 🔧 DropArea AUF ERSTER EBENE - reagiert auf gesamtes Fenster
+    // DropArea at top level — reacts to drops anywhere in the window
     DropArea {
         id: globalDropArea
         anchors.fill: parent
         keys: ["text/uri-list"]
 
-        // Sichtbares Feedback beim Drüberziehen
+        // Visual feedback while dragging over
         Rectangle {
             anchors.fill: parent
-            color: "#4400ff00"  // Halbtransparentes Grün
+            color: "#4400ff00"  // semi-transparent green
             border.color: "green"
             border.width: 3
-            opacity: parent.containsDrag ? 0.5 : 0  // Nur beim Drüberziehen sichtbar
+            opacity: parent.containsDrag ? 0.5 : 0  // only visible while dragging
             Behavior on opacity { NumberAnimation { duration: 100 } }
         }
 
-        // Wird aufgerufen, wenn Dateien abgelegt werden
+        // Called when files are dropped
         onDropped: function(drop) {
-            console.log("🟢 Dateien wurden abgelegt:", drop.urls[0]);
+            console.log("Files dropped:", drop.urls[0]);
 
-            // An Python/Backend weiterreichen
+            // Hand over to the Python backend
             if (typeof MainCtrl !== "undefined") {
                 settingsPane.openFile(drop.urls[0])
             } else {
-                console.warn("❌ MainCtrl nicht verfügbar");
+                console.warn("MainCtrl not available");
             }
 
             drop.acceptProposedAction();
         }
 
-        // Verhindert, dass das VTKItem die Events "frisst"
+        // Keeps the VTKItem from swallowing the events
         onEntered: function(drag) {
-            console.log("Dateien werden über das Fenster gezogen");
+            console.log("Files dragged over the window");
             drag.acceptProposedAction();
         }
     }
@@ -95,13 +98,13 @@ Window {
         width: 36
     }
 
-    // ✅ DIESE FUNKTION WIRD ALS LETZTES AUFGERUFEN
+    // Called last, once the window is complete
     Component.onCompleted: {
-        // Hier den Controller benachrichtigen
+        // Notify the controller here
         if (typeof MainCtrl !== "undefined") {
             //MainCtrl.notify_qml_ready();
         } else {
-            console.warn("MainCtrl ist noch nicht verfügbar");
+            console.warn("MainCtrl not available yet");
         }
     }
 

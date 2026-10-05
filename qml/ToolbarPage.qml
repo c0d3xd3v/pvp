@@ -5,6 +5,7 @@ import QtQuick.Layouts
 RowLayout {
     id: toolbarLayout
     height: 32
+    spacing: 0
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.top: parent.top
@@ -12,9 +13,13 @@ RowLayout {
     anchors.leftMargin: 0
     anchors.rightMargin: 0
 
+    property int btnSize: 32
+
     RoundButton {
-        opacity: 0.402
-        text: ""
+        Layout.preferredWidth: btnSize
+        Layout.preferredHeight: btnSize
+        padding: 6
+        flat: true
         icon.source: "qrc:/icons/settings.svg"
         display: AbstractButton.IconOnly
         onClicked: function() {
@@ -26,13 +31,35 @@ RowLayout {
     }
 
     RoundButton {
-        opacity: 0.402
-        text: ""
-        //icon.source: "qrc:/icons/settings.svg"
+        Layout.preferredWidth: btnSize
+        Layout.preferredHeight: btnSize
+        padding: 6
+        flat: true
         icon.name: "folder"
         display: AbstractButton.IconOnly
         onClicked: function() {
             fileDialog.open()
+        }
+    }
+
+    RoundButton {
+        id: exportButton
+        objectName: "exportButton"
+        Layout.preferredWidth: btnSize
+        Layout.preferredHeight: btnSize
+        padding: 6
+        flat: true
+        icon.source: "qrc:/icons/export.svg"
+        display: AbstractButton.IconOnly
+        enabled: PreProcCtrl.canExportVolume()
+        ToolTip.visible: hovered
+        ToolTip.text: "Export"
+        ToolTip.delay: 500
+        onClicked: exportDialog.open()
+
+        Connections {
+            target: PreProcCtrl
+            function onSessionChanged() { exportButton.enabled = PreProcCtrl.canExportVolume() }
         }
     }
 
@@ -43,18 +70,13 @@ RowLayout {
 
     RoundButton {
         id: roundButton
-        opacity: 0.413
+        Layout.preferredWidth: btnSize
+        Layout.preferredHeight: btnSize
         padding: 6
-        checked: false
+        flat: true
         checkable: true
-        highlighted: false
-        flat: false
         display: AbstractButton.IconOnly
-        icon.source: "qrc:/icons/keep_off.svg"
-        onToggled: if(checked) {
-                        isFixed = true
-                    } else if(!checked) {
-                        isFixed = false
-                    }
+        icon.source: checked ? "qrc:/icons/keep.svg" : "qrc:/icons/keep_off.svg"
+        onToggled: isFixed = checked
     }
 }

@@ -5,7 +5,7 @@ import QtQuick.Layouts
 
 GridLayout {
     Layout.fillWidth: true
-    Layout.preferredHeight: implicitHeight   // passt sich Inhalt an
+    Layout.preferredHeight: implicitHeight   // fits its content
     columns: 4
     columnSpacing: 8
     rowSpacing: 8
@@ -13,12 +13,12 @@ GridLayout {
     property int tbSize: 40
 
     ToolButton { 
-        Layout.preferredWidth: tbSize; 
+        Layout.minimumWidth: tbSize;
         Layout.preferredHeight: tbSize; 
         text: "Center"
         ToolTip.visible: hovered
-        ToolTip.text: "Ansicht zentrieren"
-        ToolTip.delay: 500   // Millisekunden, bis der Tooltip erscheint
+        ToolTip.text: "Center view"
+        ToolTip.delay: 500   // ms until the tooltip appears
         onClicked: function() {
             SelectionCtrl.center_to_geometric_center()
         }

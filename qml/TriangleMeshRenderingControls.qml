@@ -7,7 +7,6 @@ ColumnLayout {
 
     Switch {
         id: wireframeSwitch
-        opacity: 0.789
         text: qsTr("show triangle outline")
         display: AbstractButton.TextOnly
         Layout.fillWidth: true

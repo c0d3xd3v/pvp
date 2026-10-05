@@ -1,9 +1,12 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 Item {
     id: partitionsRoot
+
+    implicitHeight: partitionsColumn.implicitHeight + 10   // + top/bottom margins
 
     property var partitions: PreProcCtrl.getPartitions()
 
@@ -14,7 +17,10 @@ Item {
     }
 
     ColumnLayout {
-        anchors.fill: parent
+        id: partitionsColumn
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
         anchors.topMargin: 5
         anchors.bottomMargin: 5
         anchors.leftMargin: 5
@@ -24,12 +30,13 @@ Item {
             Layout.fillWidth: true
             TextField {
                 id: inputField
-                placeholderText: "Neuer Randbedingungs-Name ..."
+                placeholderText: "New boundary name…"
                 Layout.fillWidth: true
                 onAccepted: addPartition()
             }
-            Button {
+            ToolButton {
                 text: "+"
+                font.pixelSize: 18
                 enabled: inputField.text.trim() !== ""
                 onClicked: addPartition()
             }
@@ -37,7 +44,8 @@ Item {
 
         ListView {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            // grows with its entries up to ~6 rows, then scrolls internally
+            Layout.preferredHeight: Math.min(contentHeight, 250)
             model: partitionsRoot.partitions
             clip: true
             spacing: 2
@@ -47,9 +55,10 @@ Item {
                 required property int index
                 width: ListView.view.width
                 height: 40
-                color: modelData.selected ? "#cfe2ff"
-                     : (index % 2 === 0 ? "#f8f8f8" : "#ffffff")
-                border.color: modelData.selected ? "#0d6efd" : "#ddd"
+                color: modelData.selected
+                       ? Qt.rgba(Material.accent.r, Material.accent.g, Material.accent.b, 0.18)
+                       : (index % 2 === 0 ? Qt.rgba(1, 1, 1, 0.03) : "transparent")
+                border.color: modelData.selected ? Material.accent : Qt.rgba(1, 1, 1, 0.10)
                 border.width: modelData.selected ? 2 : 1
 
                 // Declared BEFORE the RowLayout so it sits underneath — the delete
@@ -75,17 +84,16 @@ Item {
                         Layout.preferredHeight: 18
                         radius: 3
                         color: modelData.color
-                        border.color: "#666"
+                        border.color: Qt.rgba(1, 1, 1, 0.25)
                         border.width: 1
                     }
-                    Text {
+                    Label {
                         text: modelData.name
-                        font.pixelSize: 14
                         Layout.fillWidth: true
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                     }
-                    Button {
+                    ToolButton {
                         text: "×"
                         implicitWidth: 32
                         onClicked: PreProcCtrl.deletePartition(modelData.id)

@@ -48,7 +48,8 @@ def write_vol(path, vertices, tetrahedra, triangles, groups):
     F = _orient_boundary(P, T, np.asarray(triangles, dtype=np.int64))
 
     mesh = nm.Mesh(dim=3)
-    pids = [mesh.Add(nm.MeshPoint(nm.Point3d(*p))) for p in P]
+    # nm.Pnt: Point3d was removed in newer netgen releases (e.g. 6.2.2608)
+    pids = [mesh.Add(nm.MeshPoint(nm.Pnt(*p))) for p in P]
 
     for i, (name, indices) in enumerate(groups):
         fd = mesh.Add(nm.FaceDescriptor(bc=i + 1, domin=1, domout=0, surfnr=i + 1))

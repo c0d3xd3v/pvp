@@ -62,20 +62,24 @@ The app also starts without the module, but then meshing is unavailable.
 ## Run
 
 ```bash
-./run.sh            # compiles the Qt resources, then starts the app
+./run.sh              # or: python3 pvp.py
+./run.sh mesh.stl     # optionally load a mesh (.stl, .obj, .vol, .msh, .vtk) on start
 ```
 
-`run.sh` does the following:
+QML files and icons are loaded from compiled Qt resources (`qrc:/`).
+`pvp.py` regenerates `resources/resources.py` with `pyside6-rcc` on start whenever
+it is missing or older than a file listed in `resources/resources.qrc` (the generated
+file is not tracked in git). New QML files or icons must be added to
+`resources/resources.qrc`.
+
+## Tests
 
 ```bash
-pyside6-rcc resources/resources.qrc -o resources/resources.py
-python3 pvp.py
+pip install pytest
+python3 -m pytest tests
 ```
 
-**Important:** QML files and icons are loaded from the compiled Qt resources (`qrc:/`).
-After changing anything in `qml/` or `resources/icons/`, `resources/resources.py` has to
-be regenerated (`./run.sh` does that). New files must also be added to
-`resources/resources.qrc`.
+The fTetWild tests are skipped if `pyFloatTetwildWrapper` has not been built.
 
 ## Workflow
 

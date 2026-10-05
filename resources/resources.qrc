@@ -13,7 +13,6 @@
         <file alias="main.qml">../qml/main.qml</file>
         <file alias="SidePage.qml">../qml/SidePage.qml</file>
         <file alias="SolutionControl.qml">../qml/SolutionControl.qml</file>
-        <file alias="AnimationControls.qml">../qml/AnimationControls.qml</file>
         <file alias="TriangleMeshRenderingControls.qml">../qml/TriangleMeshRenderingControls.qml</file>
         <file alias="TriangleMeshToolsControls.qml">../qml/TriangleMeshToolsControls.qml</file>
         <file alias="OpenMeshFileDialog.qml">../qml/OpenMeshFileDialog.qml</file>

@@ -83,7 +83,7 @@ Item {
     Connections {
         id: meshLoadedConnection
         target: MainCtrl
-        onMeshLoaded: function(dataType){ handleLoadedData(dataType) }
+        function onMeshLoaded(dataType) { handleLoadedData(dataType) }
     }
 
     SequentialAnimation on width {

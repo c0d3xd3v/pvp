@@ -4,6 +4,7 @@ from PySide6.QtCore import Slot
 from PySide6.QtCore import QUrl
 from PySide6.QtCore import Signal
 from PySide6.QtCore import QObject
+from PySide6.QtCore import QTimer
 from PySide6.QtQml import QQmlApplicationEngine
 
 from SelectionCtrl import SelectionCtrl
@@ -31,6 +32,7 @@ class MainCtrl(QObject):
         self.__prepoc_ctrl    = PreProcCtrl()
         self.__result_ctrl    = ResultCtrl()
         self.__meshing_ctrl   = MeshingCtrl()
+        self.__startup_file: str | None = None
 
         self.__prepoc_ctrl.set_controllers(self.__scene_ctrl, self.__selection_ctrl)
         self.__result_ctrl.set_scene_ctrl(self.__scene_ctrl)
@@ -42,13 +44,10 @@ class MainCtrl(QObject):
         return self.__scene_ctrl
 
     def set_cmd_args(self, args):
+        # Loading needs the VTK renderer, which only exists after the first frame;
+        # the file is loaded from __on_renderer_ready (see setupInternal).
         if len(args) > 1:
-            path = args[1]
-            ext = Path(path).suffix.lower()
-            if ext in _SURFACE_EXTS:
-                self.__prepoc_ctrl.loadSurface(path)
-            elif ext in _VOLUME_EXTS:
-                self.__prepoc_ctrl.loadVolume(path)
+            self.__startup_file = QUrl.fromLocalFile(str(Path(args[1]).resolve())).toString()
 
     def setupContext(self, engine: QQmlApplicationEngine):
         ctxt = engine.rootContext()
@@ -62,6 +61,18 @@ class MainCtrl(QObject):
     def setupInternal(self, item: VTKItem):
         self.__scene_ctrl.set_vtk_item(item)
         item.mouse_interactor.qt_signals.cell_picked.connect(self.__selection_ctrl.face_selected)
+        # rendererInitialized is emitted on the render thread; connecting it to a
+        # slot of this (GUI-thread) object makes the call queued onto the GUI thread.
+        item.rendererInitialized.connect(self.__on_renderer_ready)
+        if item.renderer is not None:   # render thread was faster than us
+            QTimer.singleShot(0, self.__on_renderer_ready)
+
+    @Slot()
+    def __on_renderer_ready(self):
+        # Go through loadMesh so QML gets meshLoaded like for a file dialog/drop.
+        if self.__startup_file:
+            path, self.__startup_file = self.__startup_file, None
+            self.loadMesh(path)
 
     @Slot(str)
     def loadMesh(self, file_path: str):

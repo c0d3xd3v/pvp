@@ -18,6 +18,26 @@ from PySide6.QtWidgets         import QApplication
 from PySide6.QtQml             import QQmlApplicationEngine
 from PySide6.QtQuickControls2  import QQuickStyle
 
+
+def _compile_resources():
+    """Regenerate resources/resources.py with pyside6-rcc when it is missing or
+    older than the .qrc or any file it lists (QML, icons, ...). The generated
+    file is not tracked in git."""
+    import re
+    import subprocess
+    from pathlib import Path
+
+    res_dir = Path(__file__).resolve().parent / "resources"
+    qrc, out = res_dir / "resources.qrc", res_dir / "resources.py"
+    sources = [qrc] + [res_dir / f for f in re.findall(r"<file[^>]*>([^<]+)</file>", qrc.read_text())]
+    newest = max(s.stat().st_mtime for s in sources if s.exists())
+    if not out.exists() or out.stat().st_mtime < newest:
+        print("Compiling Qt resources ...")
+        subprocess.check_call(["pyside6-rcc", str(qrc), "-o", str(out)])
+
+
+_compile_resources()
+
 from MainCtrl          import MainCtrl
 from qml.vtk.VTKItem   import VTKItem
 from resources         import resources
@@ -31,7 +51,6 @@ if __name__ == "__main__":
     QQuickStyle.setStyle("Material")
     engine = QQmlApplicationEngine()
     mainctrl = MainCtrl()
-
     mainctrl.set_cmd_args(sys.argv)
 
     engine.addImportPath(':/qml/')

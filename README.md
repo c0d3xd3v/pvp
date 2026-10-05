@@ -1,19 +1,116 @@
 # pvp
-pre view post - a viewer for pre and postprocessing in 
-numerical computational tasks
 
-## License
-For open source projects, say how it is licensed.
+**pre / view / post** — a viewer for pre- and post-processing in numerical
+computational tasks (CFD/FEM).
+
+- Load surface meshes (`.stl`, `.obj`), volume meshes (`.vol`) and results (`.vtk`)
+- Tetrahedral meshing of surfaces with [fTetWild](https://github.com/wildmeshing/fTetWild)
+- Define boundary conditions by selecting surface faces
+- Export the volume mesh with boundary-condition labels as Netgen `.vol`
+- Result visualization (scalar fields, displacement animation)
+
+Built with Python, PySide6 (Qt Quick, Material Dark style) and VTK.
 
 ## Project status
 Early, very early ...
-### dependencies
-* vtk
-* pyside6
-* ngsolve
-* libigl
 
-##
+## Requirements
 
+Tested on Debian 13 with Python 3.12, GCC 14, CMake 3.31.
+
+**System packages** (for building the fTetWild extension):
+
+```bash
+sudo apt install build-essential cmake git libgmp-dev
+```
+
+- A C++17 compiler with OpenMP (GCC is fine)
+- GMP (`libgmp-dev`)
+- Internet access during the first build: CMake fetches Eigen, pybind11, TBB
+  and fTetWild's other third-party libraries
+
+**Python packages:**
+
+```bash
+pip install PySide6 vtk numpy libigl ngsolve meshio h5py PyOpenGL
+```
+
+`ngsolve` also installs `netgen-mesher`, which is used for reading and writing `.vol` files.
+
+## Build
+
+```bash
+git clone --recursive https://gitlab.com/c0d3xd3v/pvp.git
+cd pvp
+# if you cloned without --recursive:
+git submodule update --init --recursive
+
+pip install -e .
+```
+
+`pip install -e .` runs CMake on `external/floattetwild-wrapper` (see `setup.py`).
+That builds fTetWild and the Python module `pyFloatTetwildWrapper`. The first build
+takes a while and the build directory (`external/floattetwild-wrapper/build`) grows
+to about 1 GB. Check the result with:
+
+```bash
+python3 -c "import pyFloatTetwildWrapper"
+```
+
+The app also starts without the module, but then meshing is unavailable.
+
+## Run
+
+```bash
+./run.sh            # compiles the Qt resources, then starts the app
+```
+
+`run.sh` does the following:
+
+```bash
 pyside6-rcc resources/resources.qrc -o resources/resources.py
 python3 pvp.py
+```
+
+**Important:** QML files and icons are loaded from the compiled Qt resources (`qrc:/`).
+After changing anything in `qml/` or `resources/icons/`, `resources/resources.py` has to
+be regenerated (`./run.sh` does that). New files must also be added to
+`resources/resources.qrc`.
+
+## Workflow
+
+1. Open a surface mesh: folder icon in the toolbar, or drag & drop onto the window.
+2. **Meshing** tab: choose the mesher parameters and press **Run**.
+   - *Epsilon (rel)* controls how closely the tet surface follows the input
+     (smaller = more surface detail, more tets).
+   - *Edge Length (rel)* is the target edge length relative to the bounding-box diagonal.
+3. **Boundaries** tab: create boundary conditions and assign faces by selecting them
+   in the 3D view.
+4. **Export** (download icon in the toolbar): writes a Netgen `.vol` with volume and
+   boundary faces. Every face carries the name of its boundary condition; unassigned
+   faces are exported as `default`.
+
+## Project structure
+
+| Path | Contents |
+|---|---|
+| `pvp.py`, `MainCtrl.py` | Entry point, wiring of the controllers |
+| `*Ctrl.py` | Controllers exposed to QML (`PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
+| `qml/` | User interface (Qt Quick) |
+| `meshing/` | Mesher interface (`TetMesher.py`) and fTetWild implementation |
+| `fileio/` | Readers and writers (`NetgenVolWriter.py` for `.vol` export) |
+| `geometry/` | Mesh data containers and geometry helpers |
+| `Visualization/vtk/` | VTK actors and interaction |
+| `external/fTetWild` | fTetWild (git submodule) |
+| `external/floattetwild-wrapper` | pybind11 wrapper around fTetWild |
+
+## License
+pvp is licensed under the [Mozilla Public License 2.0](LICENSE) (MPL-2.0).
+
+In short: you may use pvp for any purpose, including commercial and closed-source
+projects, and combine it with code under other licenses. If you distribute modified
+versions of pvp's own files, those modifications must be made available under the
+MPL-2.0 as well. That way, improvements find their way back into the project.
+
+Third-party components keep their own licenses, e.g. fTetWild and libigl (MPL-2.0),
+Qt/PySide6 (LGPLv3), Netgen/NGSolve (LGPL-2.1), VTK (BSD).

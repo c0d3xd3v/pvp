@@ -26,7 +26,7 @@ class PreProcCtrl(QObject):
     def set_controllers(self, scene_ctrl, selection_ctrl):
         self.__scene_ctrl = scene_ctrl
         self.__selection_ctrl = selection_ctrl
-        self.__scene_ctrl.partitions_changed_cb = self.partitionsChanged.emit
+        self.__scene_ctrl.partitions.on_changed = self.partitionsChanged.emit
 
     def get_session(self) -> PreProcSession:
         return self.__session
@@ -107,8 +107,8 @@ class PreProcCtrl(QObject):
             name = (bc_name or "").strip()
             if not name or name.lower() == "default" or bc_idx not in bc_to_triangles:
                 continue
-            pid = self.__scene_ctrl.add_partition(name)
-            self.__scene_ctrl.assign_faces_to_partition(bc_to_triangles[bc_idx], pid)
+            pid = self.__scene_ctrl.partitions.add(name)
+            self.__scene_ctrl.partitions.assign_faces(bc_to_triangles[bc_idx], pid)
 
     @Slot()
     def createBackgroundMesh(self):
@@ -163,25 +163,25 @@ class PreProcCtrl(QObject):
     def createPartition(self, name: str) -> int:
         if not self.__scene_ctrl or not name.strip():
             return -1
-        return self.__scene_ctrl.add_partition(name.strip())
+        return self.__scene_ctrl.partitions.add(name.strip())
 
     @Slot(int)
     def deletePartition(self, pid: int):
         if self.__scene_ctrl:
-            self.__scene_ctrl.delete_partition(pid)
+            self.__scene_ctrl.partitions.delete(pid)
 
     @Slot(int)
     def selectPartition(self, pid: int):
         if self.__scene_ctrl:
-            self.__scene_ctrl.set_current_partition(pid if pid > 0 else None)
+            self.__scene_ctrl.partitions.set_current(pid if pid > 0 else None)
 
     @Slot(result='QVariantList')
     def getPartitions(self) -> list:
         if not self.__scene_ctrl:
             return []
-        current = self.__scene_ctrl.get_current_partition_id()
+        current = self.__scene_ctrl.partitions.current_id()
         result = []
-        for p in self.__scene_ctrl.get_partitions():
+        for p in self.__scene_ctrl.partitions.all():
             r, g, b = p.color
             hex_color = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
             result.append({
@@ -204,7 +204,7 @@ class PreProcCtrl(QObject):
         PartitionIds cell array (the source of truth for who owns what). Every
         triangle must end up in some group, otherwise the exported surface has
         holes; unassigned triangles go into a "default" group."""
-        part_ids = self.__scene_ctrl.get_partition_ids_per_cell() if self.__scene_ctrl else None
+        part_ids = self.__scene_ctrl.partitions.ids_per_cell() if self.__scene_ctrl else None
         if part_ids is None:
             return [("default", list(range(n_triangles)))]
         if part_ids.shape[0] != n_triangles:
@@ -213,7 +213,7 @@ class PreProcCtrl(QObject):
 
         groups = []
         assigned = np.zeros(n_triangles, dtype=bool)
-        for p in self.__scene_ctrl.get_partitions():
+        for p in self.__scene_ctrl.partitions.all():
             indices = np.where(part_ids == p.id)[0]
             if indices.size:
                 groups.append((p.name, indices.tolist()))

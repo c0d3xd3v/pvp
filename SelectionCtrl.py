@@ -32,7 +32,7 @@ class SelectionCtrl(QObject):
     def face_selected(self, face_id):
         if not self.__picking_enabled:
             return
-        pid = self.__scene_ctrl.get_current_partition_id() if self.__scene_ctrl else None
+        pid = self.__scene_ctrl.partitions.current_id() if self.__scene_ctrl else None
         if pid is None:
             return
         self.__surfaceTriangleMeshGraph.reset()

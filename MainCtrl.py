@@ -40,9 +40,6 @@ class MainCtrl(QObject):
         self.__meshing_ctrl.set_controllers(self.__prepoc_ctrl, self.__scene_ctrl)
         self.__selection_ctrl.update_partition.connect(self.__scene_ctrl.interactive_select)
 
-    def get_scene_ctrl(self):
-        return self.__scene_ctrl
-
     def set_cmd_args(self, args):
         # Loading needs the VTK renderer, which only exists after the first frame;
         # the file is loaded from __on_renderer_ready (see setupInternal).

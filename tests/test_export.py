@@ -14,19 +14,26 @@ class Partition:
     name: str
 
 
+class FakePartitions:
+    def __init__(self):
+        self.part_ids = None
+        self.list = []
+        self.on_changed = None
+
+    def ids_per_cell(self): return self.part_ids
+    def all(self): return self.list
+
+
 class FakeSceneCtrl:
     """Just the part of SceneCtrl that PreProcCtrl needs for meshing + export."""
     def __init__(self):
-        self.part_ids = None
-        self.partitions = []
+        self.partitions = FakePartitions()
 
     def add_surface_geometry(self, vertices, triangles):
-        self.part_ids = np.zeros(len(triangles), dtype=int)   # 0 = unassigned
+        self.partitions.part_ids = np.zeros(len(triangles), dtype=int)   # 0 = unassigned
         return None
 
     def add_volume_unstructured_mesh(self, vertices, tetrahedra): pass
-    def get_partition_ids_per_cell(self): return self.part_ids
-    def get_partitions(self): return self.partitions
 
 
 @pytest.fixture
@@ -43,8 +50,8 @@ def ctrl(unit_cube):
 def test_unassigned_faces_go_to_default(tmp_path, ctrl):
     c, scene, P, F = ctrl
     on_x0 = np.all(np.isclose(P[F][:, :, 0], 0.0), axis=1)
-    scene.partitions = [Partition(1, "inlet")]
-    scene.part_ids[on_x0] = 1
+    scene.partitions.list = [Partition(1, "inlet")]
+    scene.partitions.part_ids[on_x0] = 1
 
     assert c.canExportVolume()
     assert c.getExportSummary()["boundaries"] == 1
@@ -59,7 +66,7 @@ def test_unassigned_faces_go_to_default(tmp_path, ctrl):
 
 def test_surface_mismatch_is_reported(tmp_path, ctrl):
     c, scene, P, F = ctrl
-    scene.part_ids = scene.part_ids[:-1]          # surface no longer matches the volume
+    scene.partitions.part_ids = scene.partitions.part_ids[:-1]          # surface no longer matches the volume
     err = c.exportVolume(str(tmp_path / "x.vol"))
     assert "triangles" in err
     assert not (tmp_path / "x.vol").exists()

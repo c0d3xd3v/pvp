@@ -22,19 +22,27 @@ for pkg in ("netgen", "ngsolve"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
 
-# OpenCascade libraries of `netgen-occt` live in the environment's data dir
-# (<prefix>/bin on Windows, <prefix>/lib on Linux) and are loaded by netgen via
-# absolute paths; bundle them and let rthook_netgen.py disable that lookup.
+# Binary companion packages of netgen/ngsolve install their shared libraries
+# into the environment's data dir (<prefix>/lib on Linux, <prefix>/bin or
+# Library/bin on Windows) where PyInstaller's dependency analysis does not
+# look. Bundle every shared library they list. netgen additionally loads the
+# OpenCascade ones by absolute path; rthook_netgen.py disables that lookup.
 import importlib.metadata as _md
-try:
-    for f in _md.files("netgen-occt") or []:
+_COMPANIONS = ["netgen-occt", "ngsolve-openblas", "mkl", "intel-openmp", "tbb"]
+for _dist in _COMPANIONS:
+    try:
+        _files = _md.files(_dist) or []
+    except _md.PackageNotFoundError:
+        continue   # e.g. a self-built netgen/ngsolve without these packages
+    _n = 0
+    for f in _files:
         p = str(f.locate())
         # keep symlinked sonames too (libTKernel.so.7.8 -> .so.7.8.1): that is
         # the name other libraries link against
         if (p.endswith(".dll") or ".so" in os.path.basename(p)) and os.path.exists(p):
             binaries.append((p, "."))
-except _md.PackageNotFoundError:
-    pass   # e.g. a self-built netgen without the netgen-occt package
+            _n += 1
+    print(f"pvp.spec: bundling {_n} libraries of {_dist}")
 
 # Intel MKL (used by NGSolve) loads most of its libraries at runtime via dlopen,
 # which PyInstaller cannot see. Bundle the runtime parts explicitly, from the pip

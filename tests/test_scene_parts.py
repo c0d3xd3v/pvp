@@ -2,10 +2,10 @@
 import numpy as np
 import pytest
 
-from SceneCtrl import _triangle_polydata
-from Visualization.vtk.BoundaryPartitions import BoundaryPartitions, UNASSIGNED
-from Visualization.vtk.ClipPlane import ClipPlane
-from Visualization.vtk.FaceSelectionActor import FaceSelectionActor
+from controllers.SceneCtrl import _triangle_polydata
+from visualization.vtk.BoundaryPartitions import BoundaryPartitions, UNASSIGNED
+from visualization.vtk.ClipPlane import ClipPlane
+from visualization.vtk.FaceSelectionActor import FaceSelectionActor
 
 
 @pytest.fixture

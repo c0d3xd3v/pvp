@@ -7,14 +7,14 @@ from PySide6.QtCore import QObject
 from PySide6.QtCore import QTimer
 from PySide6.QtQml import QQmlApplicationEngine
 
-from SelectionCtrl import SelectionCtrl
-from SceneCtrl import SceneCtrl
-from PreProcCtrl import PreProcCtrl
-from ResultCtrl import ResultCtrl
-from MeshingCtrl import MeshingCtrl
-from FileIOCtrl import FileIOCtrl
+from controllers.SelectionCtrl import SelectionCtrl
+from controllers.SceneCtrl import SceneCtrl
+from controllers.PreProcCtrl import PreProcCtrl
+from controllers.ResultCtrl import ResultCtrl
+from controllers.MeshingCtrl import MeshingCtrl
+from controllers.FileIOCtrl import FileIOCtrl
 from geometry.AbstractMeshData import AbstractResultData
-from qml.vtk.VTKItem import VTKItem
+from visualization.qtquick.VTKItem import VTKItem
 
 _VOLUME_EXTS  = {".vol", ".msh"}
 _SURFACE_EXTS = {".obj", ".stl"}

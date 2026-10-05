@@ -6,10 +6,10 @@ from PySide6.QtCore import QObject
 import vtk
 from vtkmodules.util.numpy_support import numpy_to_vtk
 
-from Visualization.vtk.ResultActor import ResultActor
-from Visualization.vtk.FaceSelectionActor import FaceSelectionActor
-from Visualization.vtk.BoundaryPartitions import BoundaryPartitions
-from Visualization.vtk.ClipPlane import ClipPlane
+from visualization.vtk.ResultActor import ResultActor
+from visualization.vtk.FaceSelectionActor import FaceSelectionActor
+from visualization.vtk.BoundaryPartitions import BoundaryPartitions
+from visualization.vtk.ClipPlane import ClipPlane
 
 
 def _triangle_polydata(vertices, triangles) -> vtk.vtkPolyData:

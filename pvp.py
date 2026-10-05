@@ -38,9 +38,9 @@ def _compile_resources():
 
 _compile_resources()
 
-from MainCtrl          import MainCtrl
-from qml.vtk.VTKItem   import VTKItem
-from resources         import resources
+from controllers.MainCtrl         import MainCtrl
+from visualization.qtquick.VTKItem import VTKItem
+from resources                     import resources
 
 
 if __name__ == "__main__":

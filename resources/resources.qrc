@@ -21,9 +21,9 @@
         <file alias="partitioning/PartitionList.qml">../qml/partitioning/PartitionList.qml</file>
      </qresource>
     <qresource prefix="colormaps">
-        <file alias="color_theme.xml">../Visualization/colormaps/color_theme.xml</file>
+        <file alias="color_theme.xml">colormaps/color_theme.xml</file>
     </qresource>
     <qresource prefix="textures">
-        <file alias="skybox.jpg">../Visualization/textures/skybox.jpg</file>
+        <file alias="skybox.jpg">textures/skybox.jpg</file>
     </qresource>
 </RCC>

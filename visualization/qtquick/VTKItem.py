@@ -9,14 +9,14 @@ from PySide6.QtQml import qmlRegisterType
 
 import vtk
 
-from Visualization.vtk.vtkhelper import make_cube_actor
-from Visualization.vtk.VTKMouseInteractorStyle import VTKMouseInteractorStyle
+from visualization.vtk.vtkhelper import make_cube_actor
+from visualization.vtk.VTKMouseInteractorStyle import VTKMouseInteractorStyle
 
-from qml.vtk.mouse_helper import cloneMouseEvent
-from qml.vtk.mouse_helper import cloneWheelEvent
-from qml.vtk.mouse_helper import convertToMouseEvent
-from qml.vtk.mouse_helper import create_mouse_event_from_hover_event
-from qml.vtk.VTKItemFramebufferRenderer import FbItemRenderer
+from visualization.qtquick.mouse_helper import cloneMouseEvent
+from visualization.qtquick.mouse_helper import cloneWheelEvent
+from visualization.qtquick.mouse_helper import convertToMouseEvent
+from visualization.qtquick.mouse_helper import create_mouse_event_from_hover_event
+from visualization.qtquick.VTKItemFramebufferRenderer import FbItemRenderer
 
 
 class VTKItem(QQuickFramebufferObject):

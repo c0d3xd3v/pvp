@@ -13,7 +13,7 @@ from PySide6.QtOpenGL import QOpenGLFramebufferObject, QOpenGLFramebufferObjectF
 
 # Versuche VTKMouseInteractorStyle zu importieren, fallback auf standard style
 try:
-    from Visualization.vtk.VTKMouseInteractorStyle import VTKMouseInteractorStyle
+    from visualization.vtk.VTKMouseInteractorStyle import VTKMouseInteractorStyle
     CustomStyle = VTKMouseInteractorStyle
 except ImportError:
     CustomStyle = vtk.vtkInteractorStyleTrackballCamera

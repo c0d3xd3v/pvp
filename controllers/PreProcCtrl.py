@@ -4,8 +4,8 @@ import numpy as np
 
 from PySide6.QtCore import Slot, Signal, QObject, QUrl
 
-from FileIOCtrl import FileIOCtrl
-from PreProcSession import PreProcSession, PreProcMesh
+from controllers.FileIOCtrl import FileIOCtrl
+from geometry.PreProcSession import PreProcSession, PreProcMesh
 from geometry.MeshRole import MeshRole
 from geometry.AbstractMeshData import AbstractGeometryData
 from geometry.InMemoryMeshData import InMemoryMeshData

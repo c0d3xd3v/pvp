@@ -6,9 +6,9 @@ import numpy as np
 
 from fileio.hdf5 import read_pde_dataset_from_hdf5
 
-from Visualization.vtk.vtkhelper import iglToVtkPolydata
-from Visualization.vtk.vtkhelper import addScalarCellData
-from Visualization.vtk.vtkhelper import read_unstructured_grid
+from visualization.vtk.vtkhelper import iglToVtkPolydata
+from visualization.vtk.vtkhelper import addScalarCellData
+from visualization.vtk.vtkhelper import read_unstructured_grid
 
 from fileio.MeshGeometryFile import TetrahedralVolumeMeshGeometryFile
 

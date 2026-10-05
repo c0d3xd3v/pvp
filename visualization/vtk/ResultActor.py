@@ -1,5 +1,5 @@
 import vtkmodules.all as vtk
-from Visualization.vtk.vtkhelper import *
+from visualization.vtk.vtkhelper import *
 import numpy as np
 import math
 from vtkmodules.util.numpy_support import vtk_to_numpy, numpy_to_vtk

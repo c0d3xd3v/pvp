@@ -98,13 +98,16 @@ The fTetWild tests are skipped if `pyFloatTetwildWrapper` has not been built.
 
 | Path | Contents |
 |---|---|
-| `pvp.py`, `MainCtrl.py` | Entry point, wiring of the controllers |
-| `*Ctrl.py` | Controllers exposed to QML (`PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
+| `pvp.py` | Entry point |
+| `controllers/` | Controllers exposed to QML (`MainCtrl` wires them; `PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
 | `qml/` | User interface (Qt Quick) |
+| `visualization/vtk/` | VTK actors, boundary partitions, clip plane, mouse interaction |
+| `visualization/qtquick/` | `VTKItem`: VTK rendering inside Qt Quick |
 | `meshing/` | Mesher interface (`TetMesher.py`) and fTetWild implementation |
 | `fileio/` | Readers and writers (`NetgenVolWriter.py` for `.vol` export) |
-| `geometry/` | Mesh data containers and geometry helpers |
-| `Visualization/vtk/` | VTK actors and interaction |
+| `geometry/` | Mesh data interface/containers, pre-processing session, geometry helpers |
+| `resources/` | Qt resources: icons, colormaps, textures (`resources.qrc`) |
+| `tests/` | pytest suite |
 | `external/fTetWild` | fTetWild (git submodule) |
 | `external/floattetwild-wrapper` | pybind11 wrapper around fTetWild |
 

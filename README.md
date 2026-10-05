@@ -11,6 +11,16 @@ computational tasks (CFD/FEM).
 
 Built with Python, PySide6 (Qt Quick, Material Dark style) and VTK.
 
+## Download
+
+Ready-to-run builds for **Windows** and **Linux** are attached to each
+[release](https://github.com/c0d3xd3v/pvp/releases): unpack the archive and start
+`pvp` (Linux) or `pvp.exe` (Windows). Builds of the latest `master` are available as
+artifacts of the [build workflow](https://github.com/c0d3xd3v/pvp/actions/workflows/build.yml).
+
+On Linux the app runs through X11 (XWayland on Wayland desktops), see
+`QT_QPA_PLATFORM` in `pvp.py`.
+
 ## Project status
 Early, very early ...
 
@@ -32,7 +42,7 @@ sudo apt install build-essential cmake git libgmp-dev
 **Python packages:**
 
 ```bash
-pip install PySide6 vtk numpy libigl ngsolve meshio h5py PyOpenGL
+pip install -r requirements.txt
 ```
 
 `ngsolve` also installs `netgen-mesher`, which is used for reading and writing `.vol` files.
@@ -40,7 +50,7 @@ pip install PySide6 vtk numpy libigl ngsolve meshio h5py PyOpenGL
 ## Build
 
 ```bash
-git clone --recursive https://gitlab.com/c0d3xd3v/pvp.git
+git clone --recursive https://github.com/c0d3xd3v/pvp.git
 cd pvp
 # if you cloned without --recursive:
 git submodule update --init --recursive
@@ -71,6 +81,19 @@ QML files and icons are loaded from compiled Qt resources (`qrc:/`).
 it is missing or older than a file listed in `resources/resources.qrc` (the generated
 file is not tracked in git). New QML files or icons must be added to
 `resources/resources.qrc`.
+
+## Packaging
+
+The CI (`.github/workflows/build.yml`) builds a self-contained folder with
+PyInstaller for Linux and Windows. Locally:
+
+```bash
+pip install pyinstaller
+# fTetWild module + its shared libraries (TBB, ...) into ext/
+cmake --install external/floattetwild-wrapper/build --prefix ext --component pyfloattetwildwrapper
+PVP_EXT_DIR=$PWD/ext pyinstaller packaging/pvp.spec --noconfirm
+dist/pvp/pvp --smoke-test        # checks the bundle without opening a window
+```
 
 ## Tests
 

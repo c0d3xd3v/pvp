@@ -51,6 +51,8 @@ if(NOT EXISTS ${FTETWILD_SOURCE_DIR}/CMakeLists.txt)
     message(FATAL_ERROR
         "fTetWild submodule not initialized. Run: git submodule update --init --recursive")
 endif()
+# FindGMP.cmake for fTetWild's find_package(GMP) on Windows
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 add_subdirectory(${FTETWILD_SOURCE_DIR} ${FTETWILD_BINARY_DIR})
 include_directories(${FTETWILD_SOURCE_DIR}/src)
 
@@ -74,16 +76,23 @@ add_library(py${PROJECT_NAME} MODULE
     src/bindings.cpp
 )
 
+# Python extension naming for this interpreter/platform
+# (e.g. .cpython-312-x86_64-linux-gnu.so / .cp312-win_amd64.pyd).
+pybind11_extension(py${PROJECT_NAME})
+
+# Find bundled shared libraries (TBB) next to the module on Linux; on Windows
+# Python searches the module's own directory for dependent DLLs anyway.
 set_target_properties(py${PROJECT_NAME} PROPERTIES
-    PREFIX ""
-    BUILD_RPATH "${Python3_ROOT_DIR}/lib"
+    INSTALL_RPATH "$ORIGIN"
+    BUILD_WITH_INSTALL_RPATH ON
 )
 
+# pybind11::module links Python the way extension modules should (not against
+# libpython on Linux, against pythonXY.lib on Windows).
 target_link_libraries(py${PROJECT_NAME}
     PRIVATE
         Eigen3::Eigen
         pybind11::module
-        Python::Python
         FloatTetwild
 )
 
@@ -96,3 +105,35 @@ target_include_directories(py${PROJECT_NAME} PRIVATE ${FTETWILD_BINARY_DIR}/incl
 install(TARGETS py${PROJECT_NAME}
         LIBRARY DESTINATION .
         COMPONENT pyfloattetwildwrapper)
+
+# Ship TBB (a shared library) next to the module: either the one fTetWild
+# builds itself, or an already installed one it found (imported target).
+get_target_property(_tbb_imported tbb::tbb IMPORTED)
+get_target_property(_tbb_aliased tbb::tbb ALIASED_TARGET)
+if(_tbb_imported)
+    install(IMPORTED_RUNTIME_ARTIFACTS tbb::tbb
+            LIBRARY DESTINATION . COMPONENT pyfloattetwildwrapper
+            RUNTIME DESTINATION . COMPONENT pyfloattetwildwrapper)
+elseif(_tbb_aliased)
+    get_target_property(_tbb_type ${_tbb_aliased} TYPE)
+    if(_tbb_type STREQUAL "SHARED_LIBRARY")
+        # COMPONENT applies per artifact kind; NAMELINK_SKIP drops the dev-only libtbb.so
+        install(TARGETS ${_tbb_aliased}
+                LIBRARY DESTINATION . COMPONENT pyfloattetwildwrapper NAMELINK_SKIP
+                RUNTIME DESTINATION . COMPONENT pyfloattetwildwrapper)
+    endif()
+endif()
+
+# On Windows fTetWild builds geogram as a DLL and links GMP dynamically; those
+# DLLs must sit next to the module as well.
+if(TARGET geogram)
+    get_target_property(_geo_type geogram TYPE)
+    if(_geo_type STREQUAL "SHARED_LIBRARY")
+        install(TARGETS geogram
+                LIBRARY DESTINATION . COMPONENT pyfloattetwildwrapper NAMELINK_SKIP
+                RUNTIME DESTINATION . COMPONENT pyfloattetwildwrapper)
+    endif()
+endif()
+if(WIN32 AND GMP_RUNTIME)
+    install(FILES ${GMP_RUNTIME} DESTINATION . COMPONENT pyfloattetwildwrapper)
+endif()

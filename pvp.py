@@ -1,6 +1,9 @@
 import os
 import sys
 
+# Packaged builds ignore PYTHONUNBUFFERED; flush log lines as they come.
+sys.stdout.reconfigure(line_buffering=True)
+
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
 os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
@@ -36,7 +39,21 @@ def _compile_resources():
         subprocess.check_call(["pyside6-rcc", str(qrc), "-o", str(out)])
 
 
-_compile_resources()
+# In a packaged build (PyInstaller) resources.py is bundled and pyside6-rcc absent.
+if not getattr(sys, "frozen", False):
+    _compile_resources()
+
+if "--smoke-test" in sys.argv:
+    from PySide6.QtQuickControls2 import QQuickStyle as _style
+    import smoke_test
+    _style.setStyle("Material")
+    sys.exit(smoke_test.run())
+
+# VTK loads its OpenGL functions via GLX; with Qt's native Wayland backend the
+# packaged app hangs in VTK's context init. Use X11 (XWayland on Wayland
+# desktops) unless the user picked a platform explicitly.
+if sys.platform.startswith("linux"):
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 from controllers.MainCtrl         import MainCtrl
 from visualization.qtquick.VTKItem import VTKItem

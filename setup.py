@@ -52,15 +52,15 @@ class CMakeBuild(build_ext):
             install_cmd += ["--component", ext.install_component]
         subprocess.check_call(install_cmd, cwd=build_dir)
 
-        # cmake installs the .so with a plain name (e.g. pyFooBar.so). Setuptools'
-        # editable-install flow then looks for an ABI-tagged copy in extdir
-        # (e.g. pyFooBar.cpython-312-x86_64-linux-gnu.so). Stage a copy there
-        # so setuptools' post-build check succeeds.
+        # cmake installs the module (already ABI-tagged, e.g.
+        # pyFooBar.cpython-312-x86_64-linux-gnu.so) into install_prefix.
+        # Setuptools' editable-install flow expects a copy in extdir, so stage
+        # one there for its post-build check.
         ext_suffix = sysconfig.get_config_var("EXT_SUFFIX") or ".so"
-        src_so = os.path.join(install_prefix, f"{ext.name}.so")
-        if os.path.exists(src_so):
+        src_so = os.path.join(install_prefix, f"{ext.name}{ext_suffix}")
+        dst_so = os.path.join(extdir, f"{ext.name}{ext_suffix}")
+        if os.path.exists(src_so) and os.path.abspath(src_so) != os.path.abspath(dst_so):
             os.makedirs(extdir, exist_ok=True)
-            dst_so = os.path.join(extdir, f"{ext.name}{ext_suffix}")
             shutil.copy2(src_so, dst_so)
 
 

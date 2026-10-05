@@ -3,7 +3,6 @@ import sys
 import platform
 
 import vtk
-from OpenGL.GL import GL_RGBA
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QEvent, QPointF
@@ -11,7 +10,9 @@ from PySide6.QtGui import QCursor, QMouseEvent, QWheelEvent
 from PySide6.QtQuick import QQuickFramebufferObject
 from PySide6.QtOpenGL import QOpenGLFramebufferObject, QOpenGLFramebufferObjectFormat
 
-# Versuche VTKMouseInteractorStyle zu importieren, fallback auf standard style
+GL_RGBA = 0x1908   # OpenGL enum; avoids depending on PyOpenGL for one constant
+
+# Try to import VTKMouseInteractorStyle, fall back to the standard style
 try:
     from visualization.vtk.VTKMouseInteractorStyle import VTKMouseInteractorStyle
     CustomStyle = VTKMouseInteractorStyle
@@ -27,35 +28,35 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
         self.renderer = None
         self._fbo = None
 
-        # VTK Render Window und Interactor erstellen
+        # Create VTK render window and interactor
         self.rw = vtk.vtkGenericOpenGLRenderWindow()
         self.rwi = vtk.vtkGenericRenderWindowInteractor()
 
         self.mouseIn = False
         self.vtkitem = None
 
-        # VTK Setup
+        # VTK setup
         self.rw.SetOwnContext(False)
         self.rwi.SetRenderWindow(self.rw)
         self.renderer = vtk.vtkRenderer()
         self.rw.AddRenderer(self.renderer)
         self.window = None
 
-        # Interactor Style setzen
+        # Set interactor style
         self.style = CustomStyle()
         self.setInteractorStyle(self.style)
 
-        # Plattform-unabhängige Initialisierung
+        # Platform-independent initialization
         self._init_platform_specific()
 
     def _init_platform_specific(self):
-        """Plattform-spezifische Initialisierung"""
+        """Platform-specific initialization"""
 
-        # Allgemeine Einstellungen
-        self.rw.SetMultiSamples(0)  # MSAA deaktivieren für FBO
-        self.renderer.SetBackground(0.1, 0.1, 0.1)  # Dunkler Hintergrund
+        # General settings
+        self.rw.SetMultiSamples(0)  # disable MSAA for the FBO
+        self.renderer.SetBackground(0.1, 0.1, 0.1)  # dark background
 
-        # Für bessere Performance
+        # For better performance
         self.rw.SetAlphaBitPlanes(1)
         self.rw.SetPointSmoothing(1)
         self.rw.SetLineSmoothing(1)
@@ -68,19 +69,19 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
             self.style.SetDefaultRenderer(self.renderer)
 
     def createFramebufferObject(self, size):
-        """Framebuffer Object erstellen"""
+        """Create the framebuffer object"""
 
         fmt = QOpenGLFramebufferObjectFormat()
         fmt.setAttachment(QOpenGLFramebufferObject.CombinedDepthStencil)
-        fmt.setInternalTextureFormat(GL_RGBA)  # Explizites Format
-        fmt.setSamples(0)  # MSAA deaktivieren
+        fmt.setInternalTextureFormat(GL_RGBA)  # explicit format
+        fmt.setSamples(0)  # disable MSAA
         fmt.setMipmap(False)
 
-        # FBO erstellen
+        # Create FBO
         fbo = QOpenGLFramebufferObject(size, fmt)
 
         self._fbo = fbo
-        self.isinit = False  # Neuinitialisierung erzwingen
+        self.isinit = False  # force re-initialization
 
         return fbo
 
@@ -101,41 +102,41 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
                 self.rwi.SetSize(w, h)
 
     def render(self):
-        """Haupt-Render-Funktion"""
+        """Main render function"""
         if not self.vtkitem:
             return
 
-        # Initialisierung beim ersten Render
+        # Initialize on first render
         if not self.isinit:
             self._initialize_vtk_context()
 
-        # VTK Context aktivieren
+        # Make the VTK context current
         self.rw.SetIsCurrent(True)
         self.rw.SetReadyForRendering(True)
 
-        # Mouse Events verarbeiten
+        # Process mouse events
         self._process_mouse_events()
 
-        # Render durchführen
+        # Render
         self.rw.Render()
         self.rwi.Render()
 
     def _initialize_vtk_context(self):
-        """VTK OpenGL Context initialisieren"""
+        """Initialize the VTK OpenGL context"""
         try:
             self.rw.SetIsCurrent(True)
             self.rw.SetReadyForRendering(True)
             self.rw.OpenGLInitContext()
 
-            # Wichtige Einstellungen für Qt Integration
+            # Settings required for the Qt integration
             self.rw.SetUseOffScreenBuffers(False)
-            self.rw.SetSwapBuffers(True)  # Qt macht das Swapping
+            self.rw.SetSwapBuffers(True)  # Qt does the swapping
 
             self.rwi.Initialize()
             self.rwi.Start()
             self.rwi.Enable()
 
-            # Renderer optimieren
+            # Renderer tuning
             #self.renderer.SetUseDepthPeeling(1)
             #self.renderer.SetMaximumNumberOfPeels(5)
             #self.renderer.SetOcclusionRatio(0.1)
@@ -146,32 +147,32 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
 
         except Exception as e:
             print(f"Error initializing VTK context: {e}")
-            # Fallback: Versuche es ohne spezielle Initialisierung
+            # Fallback: try without special initialization
             self.rwi.Initialize()
             self.isinit = True
 
     def _process_mouse_events(self):
-        """Mouse Events vom QML Item verarbeiten"""
+        """Process mouse events from the QML item"""
         if not hasattr(self.vtkitem, 'mouseButtonEvents'):
             return
 
-        # Button Events
+        # Button events
         # all queued, in order (press, double-click, release, ...)
         while self.vtkitem.mouseButtonEvents:
             self.__processMouseButtonEvent(self.vtkitem.mouseButtonEvents.popleft())
 
-        # Move Events
+        # Move events
         if self.vtkitem.lastMouseMoveEvent and not self.vtkitem.lastMouseMoveEvent.isAccepted():
             self.__processMouseMoveEvent(self.vtkitem.lastMouseMoveEvent)
             self.vtkitem.lastMouseMoveEvent.accept()
 
-        # Wheel Events
+        # Wheel events
         if self.vtkitem.lastWheelEvent and not self.vtkitem.lastWheelEvent.isAccepted():
             self.__processWheelEvent(self.vtkitem.lastWheelEvent)
             self.vtkitem.lastWheelEvent.accept()
 
     def __processMouseButtonEvent(self, event: QMouseEvent):
-        """Verarbeite Mouse Button Events"""
+        """Handle mouse button events"""
         if not self.rwi:
             return
 
@@ -198,7 +199,7 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
                 self.rwi.MiddleButtonReleaseEvent()
 
     def __processMouseMoveEvent(self, event: QMouseEvent):
-        """Verarbeite Mouse Move Events"""
+        """Handle mouse move events"""
         if not self.rwi:
             return
 
@@ -207,7 +208,7 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
         self.rwi.MouseMoveEvent()
 
     def __processWheelEvent(self, event: QWheelEvent):
-        """Verarbeite Mouse Wheel Events"""
+        """Handle mouse wheel events"""
         if not self.rwi:
             return
 
@@ -221,7 +222,7 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
             self.rwi.MouseWheelBackwardEvent()
 
     def __setEventInformation(self, positionPoint: QPointF, ctrl, shift, key, repeat=0, keysum=None):
-        """Setze Event-Information für VTK"""
+        """Set event information for VTK"""
         if not self.rwi:
             return
 
@@ -245,7 +246,7 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
         )
 
     def __getCtrlShift(self, event):
-        """Ermittle Ctrl/Shift Modifier"""
+        """Determine Ctrl/Shift modifiers"""
         ctrl = shift = False
 
         if hasattr(event, "modifiers"):
@@ -261,27 +262,27 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
             return self.vtkitem.window().devicePixelRatio()
         return 1.0
 
-    # Hilfsmethoden für VTK Integration
+    # Helpers for the VTK integration
     def add_actor(self, actor):
-        """VTK Actor hinzufügen"""
+        """Add a VTK actor"""
         if self.renderer and actor:
             self.renderer.AddActor(actor)
             self.rw.Render()
 
     def remove_actor(self, actor):
-        """VTK Actor entfernen"""
+        """Remove a VTK actor"""
         if self.renderer and actor:
             self.renderer.RemoveActor(actor)
             self.rw.Render()
 
     def clear(self):
-        """Szene löschen"""
+        """Clear the scene"""
         if self.renderer:
             self.renderer.RemoveAllViewProps()
             self.rw.Render()
 
     def reset_camera(self):
-        """Camera zurücksetzen"""
+        """Reset the camera"""
         if self.renderer:
             self.renderer.ResetCamera()
             self.rw.Render()

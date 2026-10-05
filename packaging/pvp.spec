@@ -7,7 +7,10 @@ import os
 import sys
 from PyInstaller.utils.hooks import collect_all
 
-STRIP = sys.platform != "win32"   # drop debug symbols from shared libraries
+# Don't strip: it corrupts manylinux wheels' libraries that were patched with
+# patchelf (e.g. numpy's bundled OpenBLAS: "ELF load command ... not
+# page-aligned"). PyPI binaries are already stripped anyway.
+STRIP = False
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 EXT_DIR = os.environ.get("PVP_EXT_DIR")
 
@@ -75,6 +78,7 @@ exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
     name="pvp",
+    icon=os.path.join(ROOT, "resources", "icons", "pvp.ico"),   # Windows .exe icon
     console=True,          # keeps log output visible; --smoke-test needs stdout
     strip=STRIP,
     upx=False,

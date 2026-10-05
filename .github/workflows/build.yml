@@ -44,10 +44,12 @@ jobs:
           sudo apt-get install -y libgmp-dev libegl1 libgl1 libopengl0 \
             libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3
 
-      - name: Cache GMP (Windows)
+      # Caches are restored/saved explicitly: actions/cache only saves at the end
+      # of a *successful* job, so a later failing step would force a full rebuild.
+      - name: Restore GMP (Windows)
         if: runner.os == 'Windows'
         id: gmp-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: C:/vcpkg/installed
           key: vcpkg-gmp-x64-windows-v1
@@ -56,9 +58,17 @@ jobs:
         if: runner.os == 'Windows' && steps.gmp-cache.outputs.cache-hit != 'true'
         run: C:/vcpkg/vcpkg install gmp:x64-windows
 
+      - name: Save GMP (Windows)
+        if: runner.os == 'Windows' && steps.gmp-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:/vcpkg/installed
+          key: vcpkg-gmp-x64-windows-v1
+
       # --- fTetWild Python module ------------------------------------------
-      - name: Cache fTetWild build
-        uses: actions/cache@v4
+      - name: Restore fTetWild build
+        id: ftw-cache
+        uses: actions/cache/restore@v4
         with:
           path: external/floattetwild-wrapper/build
           key: ftw-${{ runner.os }}-${{ hashFiles('external/floattetwild-wrapper/CMakeLists.txt', 'external/floattetwild-wrapper/cmake/**', 'external/floattetwild-wrapper/src/**', 'external/fTetWild/CMakeLists.txt', 'external/fTetWild/cmake/**', 'external/fTetWild/src/**') }}
@@ -75,6 +85,13 @@ jobs:
           cmake --install "$BUILD_DIR" --config Release --prefix "$EXT_DIR" \
                 --component pyfloattetwildwrapper
           ls -la "$EXT_DIR"
+
+      - name: Save fTetWild build
+        if: steps.ftw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: external/floattetwild-wrapper/build
+          key: ${{ steps.ftw-cache.outputs.cache-primary-key }}
 
       # --- tests -------------------------------------------------------------
       - name: Python dependencies
@@ -99,7 +116,7 @@ jobs:
       - name: Archive
         shell: bash
         run: |
-          cp LICENSE README.md dist/pvp/
+          cp LICENSE README.md resources/icons/pvp.png dist/pvp/
           cd dist
           if [ "$RUNNER_OS" = "Windows" ]; then 7z a -tzip ../${{ matrix.artifact }}.zip pvp > /dev/null
           else tar czf ../${{ matrix.artifact }}.tar.gz pvp; fi

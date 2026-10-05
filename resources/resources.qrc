@@ -7,6 +7,7 @@
         <file alias="pqVcrPlay.svg">icons/pqVcrPlay.svg</file>
         <file alias="settings.svg">icons/settings.svg</file>
         <file alias="export.svg">icons/export.svg</file>
+        <file alias="pvp.svg">icons/pvp.svg</file>
     </qresource>
     <qresource prefix="qml">
         <file alias="qmldir">../qml/qmldir</file>

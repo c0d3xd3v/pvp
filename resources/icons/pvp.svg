@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- pvp logo: "q v p" — the q is the p mirrored (pre / view / post) -->
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#263238"/>
+  <g fill="none" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
+    <!-- q = mirrored p -->
+    <g stroke="#ECEFF1">
+      <circle cx="55" cy="104" r="26"/>
+      <line x1="81" y1="78" x2="81" y2="178"/>
+    </g>
+    <!-- v -->
+    <polyline stroke="#4DB6AC" points="102,82 128,130 154,82"/>
+    <!-- p -->
+    <g stroke="#ECEFF1">
+      <circle cx="201" cy="104" r="26"/>
+      <line x1="175" y1="78" x2="175" y2="178"/>
+    </g>
+  </g>
+</svg>

@@ -18,9 +18,15 @@ pathex = [ROOT] + ([EXT_DIR] if EXT_DIR else [])
 datas, binaries, hiddenimports = [], [], ["smoke_test", "resources.resources"]
 
 # Netgen/NGSolve ship shared libraries and data next to their Python packages.
-for pkg in ("netgen", "ngsolve"):
+# ngsolve_openblas (PyPI builds of ngsolve) is imported dynamically and preloads
+# its OpenBLAS (libopenblasp-r*.so, soname libopenblas.so.0) from its own folder,
+# so it has to be bundled as a package, not just as a library.
+import importlib.util
+for pkg in ("netgen", "ngsolve", "ngsolve_openblas"):
+    if importlib.util.find_spec(pkg) is None:
+        continue
     d, b, h = collect_all(pkg)
-    datas += d; binaries += b; hiddenimports += h
+    datas += d; binaries += b; hiddenimports += h + [pkg]
 
 # Binary companion packages of netgen/ngsolve install their shared libraries
 # into the environment's data dir (<prefix>/lib on Linux, <prefix>/bin or
@@ -28,7 +34,7 @@ for pkg in ("netgen", "ngsolve"):
 # look. Bundle every shared library they list. netgen additionally loads the
 # OpenCascade ones by absolute path; rthook_netgen.py disables that lookup.
 import importlib.metadata as _md
-_COMPANIONS = ["netgen-occt", "ngsolve-openblas", "mkl", "intel-openmp", "tbb"]
+_COMPANIONS = ["netgen-occt", "mkl", "intel-openmp", "tbb"]
 for _dist in _COMPANIONS:
     try:
         _files = _md.files(_dist) or []

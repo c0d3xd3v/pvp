@@ -77,7 +77,7 @@ class PreProcCtrl(QObject):
                 self.__selection_ctrl.load_geometry(polydata)
 
             # Build volume
-            if hasattr(data, 'get_tetrahedra') and data.get_tetrahedra():
+            if data.has_tetrahedra():
                 self.__scene_ctrl.add_volume_unstructured_mesh(
                     data.get_vertices(), data.get_tetrahedra()
                 )
@@ -92,8 +92,8 @@ class PreProcCtrl(QObject):
         self.sessionChanged.emit()
 
     def __populate_partitions_from_bcs(self, data):
-        bc_names = getattr(data, 'get_bc_names', lambda: {})()
-        triangle_bcs = getattr(data, 'get_triangle_bcs', lambda: [])()
+        bc_names = data.get_bc_names()
+        triangle_bcs = data.get_triangle_bcs()
         if not bc_names or not triangle_bcs:
             return
         # Group triangle indices by BC number
@@ -197,8 +197,7 @@ class PreProcCtrl(QObject):
         vol_mesh = self.__session.volume
         if vol_mesh is None or vol_mesh.data is None:
             return False
-        data = vol_mesh.data
-        return len(data.get_tetrahedra() or []) > 0 and len(data.get_triangles() or []) > 0
+        return vol_mesh.data.has_tetrahedra() and len(vol_mesh.data.get_triangles()) > 0
 
     def __collect_bc_groups(self, n_triangles: int) -> list[tuple[str, list[int]]]:
         """Map the current partitions to triangle groups via the FaceSelectionActor's

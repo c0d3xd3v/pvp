@@ -19,8 +19,7 @@
         <file alias="ExportDialog.qml">../qml/ExportDialog.qml</file>
         <file alias="ToolbarPage.qml">../qml/ToolbarPage.qml</file>
         <file alias="partitioning/PartitionList.qml">../qml/partitioning/PartitionList.qml</file>
-         <file alias="meshtools/MeshtoolsList.qml">../qml/meshtools/MeshtoolsList.qml</file>
-    </qresource>
+     </qresource>
     <qresource prefix="colormaps">
         <file alias="color_theme.xml">../Visualization/colormaps/color_theme.xml</file>
     </qresource>

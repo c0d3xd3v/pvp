@@ -4,7 +4,6 @@ import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 import "partitioning"
-import "meshtools"
 
 Item {
     id: meshToolsRoot
@@ -67,9 +66,6 @@ Item {
 
             // Tab 1: Surface partitioning (BCs)
             ColumnLayout {
-                MeshtoolsList {
-                    Layout.fillWidth: true
-                }
                 PartitionList {
                     Layout.fillWidth: true
                 }

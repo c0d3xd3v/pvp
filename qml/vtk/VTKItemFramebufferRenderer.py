@@ -152,13 +152,13 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
 
     def _process_mouse_events(self):
         """Mouse Events vom QML Item verarbeiten"""
-        if not hasattr(self.vtkitem, 'lastMouseButtonEvent'):
+        if not hasattr(self.vtkitem, 'mouseButtonEvents'):
             return
 
         # Button Events
-        if self.vtkitem.lastMouseButtonEvent and not self.vtkitem.lastMouseButtonEvent.isAccepted():
-            self.__processMouseButtonEvent(self.vtkitem.lastMouseButtonEvent)
-            self.vtkitem.lastMouseButtonEvent.accept()
+        # all queued, in order (press, double-click, release, ...)
+        while self.vtkitem.mouseButtonEvents:
+            self.__processMouseButtonEvent(self.vtkitem.mouseButtonEvents.popleft())
 
         # Move Events
         if self.vtkitem.lastMouseMoveEvent and not self.vtkitem.lastMouseMoveEvent.isAccepted():

@@ -30,6 +30,9 @@ class VTKMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
                 self.mesh_polydata = mapper.GetInput()
 
     def left_button_press_event(self, obj, event):
+        if self.GetInteractor().GetRepeatCount() > 0:
+            self.center_on_picked_point()
+            return      # no face selection, no rotation start for a double-click
         if not self.clip_mode:
             pos = self.GetInteractor().GetEventPosition()
             renderer = self.GetDefaultRenderer()
@@ -48,3 +51,22 @@ class VTKMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
                             original_cell = ids.GetValue(picked_cell)
                     self.qt_signals.cell_picked.emit(original_cell)
         self.OnLeftButtonDown()
+
+    def center_on_picked_point(self):
+        """Move the camera so the surface point under the cursor becomes the focal
+        point (and thus the rotation center). View direction and distance stay."""
+        pos = self.GetInteractor().GetEventPosition()
+        renderer = self.GetDefaultRenderer() or self.GetCurrentRenderer()
+        if renderer is None:
+            return
+        picker = vtk.vtkCellPicker()
+        picker.SetTolerance(0.005)
+        if not picker.Pick(pos[0], pos[1], 0, renderer):
+            return
+        target = picker.GetPickPosition()
+        cam = renderer.GetActiveCamera()
+        fp, cp = cam.GetFocalPoint(), cam.GetPosition()
+        delta = [t - f for t, f in zip(target, fp)]
+        cam.SetFocalPoint(target)
+        cam.SetPosition([c + d for c, d in zip(cp, delta)])
+        renderer.ResetCameraClippingRange()

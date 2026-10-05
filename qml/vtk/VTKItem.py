@@ -1,4 +1,6 @@
 
+from collections import deque
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QPointF, Slot, QPoint, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QMouseEvent, QWheelEvent
@@ -25,7 +27,10 @@ class VTKItem(QQuickFramebufferObject):
         self.interactor = None
         self.renderWindow = None
 
-        self.lastMouseButtonEvent: QMouseEvent = None
+        # Button events are queued, not overwritten: press/double-click/release can
+        # all arrive before the render thread runs, and every one of them matters.
+        # (deque append/popleft are thread-safe; the render thread consumes them.)
+        self.mouseButtonEvents: deque[QMouseEvent] = deque()
         self.lastMouseMoveEvent: QMouseEvent = None
         self.lastWheelEvent: QWheelEvent = None
 
@@ -83,8 +88,7 @@ class VTKItem(QQuickFramebufferObject):
         self.__processMouseButtonEvent(event)
 
     def __processMouseButtonEvent(self, event: QMouseEvent):
-        self.lastMouseButtonEvent = cloneMouseEvent(event)
-        self.lastMouseButtonEvent.ignore()
+        self.mouseButtonEvents.append(cloneMouseEvent(event))
         event.accept()
         self.update()
 
@@ -104,28 +108,41 @@ class VTKItem(QQuickFramebufferObject):
     def onMousePressed(
         self, x: float, y: float, button: int, buttons: int, modifiers: int
     ):
-        self.lastMouseButtonEvent = convertToMouseEvent(
+        self.mouseButtonEvents.append(convertToMouseEvent(
             QEvent.MouseButtonPress,
             QPointF(x, y),
             Qt.MouseButton(button),
             Qt.MouseButtons(buttons),
             Qt.KeyboardModifiers(modifiers),
-        )
-        self.lastMouseButtonEvent.ignore()
+        ))
+        self.update()
+
+    @Slot(float, float, int, int, int)
+    def onMouseDoubleClicked(
+        self, x: float, y: float, button: int, buttons: int, modifiers: int
+    ):
+        # The renderer turns a DblClick into a press with repeat count 1, which the
+        # interactor style treats as "center on picked point".
+        self.mouseButtonEvents.append(convertToMouseEvent(
+            QEvent.MouseButtonDblClick,
+            QPointF(x, y),
+            Qt.MouseButton(button),
+            Qt.MouseButtons(buttons),
+            Qt.KeyboardModifiers(modifiers),
+        ))
         self.update()
 
     @Slot(float, float, int, int, int)
     def onMouseReleased(
         self, x: float, y: float, button: int, buttons: int, modifiers: int
     ):
-        self.lastMouseButtonEvent = convertToMouseEvent(
+        self.mouseButtonEvents.append(convertToMouseEvent(
             QEvent.MouseButtonRelease,
             QPointF(x, y),
             Qt.MouseButton(button),
             Qt.MouseButtons(buttons),
             Qt.KeyboardModifiers(modifiers),
-        )
-        self.lastMouseButtonEvent.ignore()
+        ))
         self.update()
 
     @Slot(float, float, int, int, int)

@@ -41,6 +41,14 @@ ApplicationWindow {
                     mouse.buttons, mouse.modifiers);
             }
 
+            // Double-click centers the view on the picked surface point
+            onDoubleClicked: function(mouse) {
+                mouse.accepted = true;
+                this.parent.onMouseDoubleClicked(
+                    mouse.x, mouse.y, mouse.button,
+                    mouse.buttons, mouse.modifiers);
+            }
+
             onPositionChanged: function(mouse) {
                 this.parent.onMouseMove(mouse.x, mouse.y, mouse.button,
                                         mouse.buttons, mouse.modifiers);

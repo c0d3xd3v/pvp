@@ -1,6 +1,5 @@
 import meshio
 import ngsolve as ngs
-import numpy as np
 
 from geometry.AbstractMeshData import AbstractGeometryData
 
@@ -23,9 +22,9 @@ class TetrahedralVolumeMeshGeometryFile(AbstractGeometryData):
             ngmesh = ngs_mesh.ngmesh
             self.__vertices = [[p[0], p[1], p[2]] for p in ngmesh.Points()]
 
-            # Vertex indices via numpy (PointId is not directly int-castable)
-            els_arr = np.array(ngmesh.Elements2D())
-            self.__triangles = [(row[0][0:3] - 1).tolist() for row in els_arr]
+            # Read vertex ids per element (PointId.nr is 1-based). Converting the
+            # element lists with np.array() depends on the netgen version.
+            self.__triangles = [[v.nr - 1 for v in el.vertices] for el in ngmesh.Elements2D()]
 
             # For BC lookup we need the FaceDescriptor.bc value, NOT el.index
             # directly — the latter is the FD index which is not guaranteed to
@@ -41,7 +40,7 @@ class TetrahedralVolumeMeshGeometryFile(AbstractGeometryData):
                         fd_to_bc[fd_idx] = fd_idx
                 self.__triangle_bcs.append(fd_to_bc[fd_idx])
 
-            self.__tetraedras = [(t[0][0:4] - 1).tolist() for t in np.array(ngmesh.Elements3D())]
+            self.__tetraedras = [[v.nr - 1 for v in el.vertices] for el in ngmesh.Elements3D()]
 
             # BC name mapping keyed by bc number. Query per unique bc so we don't
             # rely on the ordering of GetBoundaries() vs FaceDescriptor list.

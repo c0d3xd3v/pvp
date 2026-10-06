@@ -102,6 +102,14 @@ a = Analysis(
     runtime_hooks=[os.path.join(SPECPATH, "rthook_netgen.py")],
     noarchive=False,
 )
+# Linux: use the system's C++ runtime. The bundled one comes from the build
+# machine (Ubuntu 22.04, GLIBCXX_3.4.30); newer distros' Mesa GL drivers need a
+# newer libstdc++ and fail to load against the old one ("Could not initialize
+# GLX"). Every distro newer than the build machine has a compatible libstdc++.
+if sys.platform.startswith("linux"):
+    _system_runtime = ("libstdc++.so", "libgcc_s.so")
+    a.binaries = [b for b in a.binaries if not os.path.basename(b[0]).startswith(_system_runtime)]
+
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],

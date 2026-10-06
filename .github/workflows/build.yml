@@ -111,6 +111,11 @@ jobs:
       - name: Smoke test of the packaged app
         shell: bash
         run: |
+          # the smoke test runs on the build machine and can't notice a bundled
+          # libstdc++ that breaks GL drivers on newer distros, so check explicitly
+          if [ "$RUNNER_OS" = "Linux" ] && ls dist/pvp/_internal/ | grep -E "^lib(stdc\+\+|gcc_s)\.so"; then
+            echo "libstdc++/libgcc_s must not be bundled"; exit 1
+          fi
           if [ "$RUNNER_OS" = "Windows" ]; then dist/pvp/pvp.exe --smoke-test; else dist/pvp/pvp --smoke-test; fi
 
       - name: Archive

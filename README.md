@@ -18,8 +18,9 @@ Ready-to-run builds for **Windows** and **Linux** are attached to each
 `pvp` (Linux) or `pvp.exe` (Windows). Builds of the latest `master` are available as
 artifacts of the [build workflow](https://github.com/c0d3xd3v/pvp/actions/workflows/build.yml).
 
-On Linux the app runs through X11 (XWayland on Wayland desktops), see
-`QT_QPA_PLATFORM` in `pvp.py`.
+The Linux build needs a distribution at least as new as Ubuntu 22.04 (it uses the
+system's C++ runtime and graphics drivers) and runs through X11 (XWayland on
+Wayland desktops), see `QT_QPA_PLATFORM` in `pvp.py`.
 
 ## Project status
 Early, very early ...

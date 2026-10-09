@@ -1,6 +1,8 @@
+import math
+
 import numpy as np
 
-from meshing.TetMesher import ParamSpec, MeshingResult
+from meshing.TetMesher import ParamSpec, MeshingResult, ProgressFn
 
 
 class FTetWildMesher:
@@ -21,7 +23,18 @@ class FTetWildMesher:
                           "tets. 0.001 = coarse/faceted."),
     ]
 
-    def mesh(self, vertices, triangles, params):
+    _STAGE_LABEL = {
+        "preprocessing":      "Preprocessing…",
+        "tetrahedralizing":   "Tetrahedralizing…",
+        "inserting":          "Inserting triangles…",
+        "optimizing":         "Optimizing",
+        "correcting surface": "Correcting surface…",
+        "smoothing boundary": "Smoothing boundary…",
+        "filtering outside":  "Filtering outside…",
+        "done":               "Finishing…",
+    }
+
+    def mesh(self, vertices, triangles, params, progress: ProgressFn | None = None):
         # Import here so the app runs even if the wrapper isn't built yet
         from pyFloatTetwildWrapper import FTetWildWrapper
 
@@ -34,6 +47,24 @@ class FTetWildMesher:
             ideal_edge_length_rel=float(params.get("ideal_edge_length_rel", 0.05)),
             eps_rel=float(params.get("eps_rel", 0.0002)),
         )
+
+        if progress is not None:
+            def _bridge(stage: str, it: int, total: int):
+                label = self._STAGE_LABEL.get(stage, stage)
+                if stage == "optimizing" and total > 0:
+                    label = f"Optimizing ({it}/{total})"
+                    frac = it / total
+                else:
+                    frac = math.nan
+                try:
+                    progress(label, frac)
+                except Exception:
+                    pass
+            # setProgressCallback exists on patched wrappers only; fall back
+            # silently if someone runs an older build.
+            if hasattr(w, "setProgressCallback"):
+                w.setProgressCallback(_bridge)
+
         w.loadMeshGeometry(V_scaled, F)
         w.tetrahedralize()
         tris, tets, nods = w.getSurfaceIndices()

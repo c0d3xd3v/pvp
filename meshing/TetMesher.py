@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Optional, Protocol
 import numpy as np
 
 
@@ -21,9 +21,15 @@ class MeshingResult:
     tetrahedra: np.ndarray  # (K, 4) int
 
 
+# Progress callback: (stage_label, fraction). fraction is in [0, 1] when
+# known, or float('nan') to request an indeterminate indicator.
+ProgressFn = Callable[[str, float], None]
+
+
 class TetMesher(Protocol):
     name: str
     param_schema: list[ParamSpec]
 
     def mesh(self, vertices: np.ndarray, triangles: np.ndarray,
-             params: dict) -> MeshingResult: ...
+             params: dict,
+             progress: Optional[ProgressFn] = None) -> MeshingResult: ...

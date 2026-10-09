@@ -1,6 +1,8 @@
 #include "FloatTetwildWrapper.h"
 
 #include <tbb/global_control.h>
+#include <chrono>
+#include <mutex>
 #include <thread>
 #include <memory>
 #include <iostream>
@@ -124,6 +126,23 @@ public:
     static bool is_initialized;
     std::unique_ptr<tbb::global_control> scheduler;
 
+    FTetWildWrapper::ProgressCallback progress_cb;
+    std::mutex progress_mutex;
+    std::chrono::steady_clock::time_point last_emit;
+
+    // Max emit rate ~10 Hz; stage changes always pass through.
+    void emit_progress(const std::string& stage, int it, int total, bool force) {
+        if (!progress_cb)
+            return;
+        std::lock_guard<std::mutex> lk(progress_mutex);
+        auto now = std::chrono::steady_clock::now();
+        if (!force && std::chrono::duration_cast<std::chrono::milliseconds>(
+                          now - last_emit).count() < 100)
+            return;
+        last_emit = now;
+        progress_cb(stage, it, total);
+    }
+
     FTetWildWrapperImpl(double stop_energy, double ideal_edge_length_rel, double eps_rel)
     : stop_energy(stop_energy), ideal_edge_length_rel(ideal_edge_length_rel), eps_rel(eps_rel) {
         init();
@@ -154,6 +173,7 @@ public:
     }
 
     void loadMeshGeometry(Eigen::MatrixXf &nodes, Eigen::MatrixXi &tris) {
+        emit_progress("preprocessing", 0, 0, true);
         delete mesh;
         mesh = new floatTetWild::Mesh();
         mesh->params.stop_energy = stop_energy;
@@ -187,19 +207,33 @@ public:
     }
 
     void tetrahedralize() {
+        // Hand our throttled dispatcher into fTetWild for the inner opt loop.
+        if (progress_cb) {
+            mesh->params.progress_callback =
+                [this](const std::string& stage, int it, int total) {
+                    emit_progress(stage, it, total, false);
+                };
+        }
+
         std::vector<bool> is_face_inserted(faces.size(), false);
+        emit_progress("tetrahedralizing", 0, 0, true);
         floatTetWild::FloatTetDelaunay::tetrahedralize(points, faces, *tree, *mesh, is_face_inserted);
+        emit_progress("inserting", 0, 0, true);
         floatTetWild::insert_triangles(points, faces, input_tags, *mesh, is_face_inserted, *tree, false);
+        emit_progress("optimizing", 0, mesh->params.max_its, true);
         floatTetWild::optimization(points, faces, input_tags, is_face_inserted, *mesh, *tree, {{1,1,1,1}});
+        emit_progress("correcting surface", 0, 0, true);
         floatTetWild::correct_tracked_surface_orientation(*mesh, *tree);
 
         auto& params = mesh->params;
         if (params.smooth_open_boundary) {
+            emit_progress("smoothing boundary", 0, 0, true);
             floatTetWild::smooth_open_boundary(*mesh, *tree);
             for (auto& t : mesh->tets)
                 if (t.is_outside) t.is_removed = true;
         } else {
             if (!params.disable_filtering) {
+                emit_progress("filtering outside", 0, 0, true);
                 if (params.use_floodfill) {
                     floatTetWild::filter_outside_floodfill(*mesh);
                 } else if (params.use_input_for_wn) {
@@ -209,6 +243,7 @@ public:
                 }
             }
         }
+        emit_progress("done", 0, 0, true);
     }
 
     void getSurfaceIndices(Eigen::MatrixXi &tris, Eigen::MatrixXi &tets, Eigen::MatrixXf &nodes) {
@@ -298,4 +333,8 @@ void FTetWildWrapper::save(const std::string &path) {
 
 void FTetWildWrapper::getSurfaceIndices(Eigen::MatrixXi &tris, Eigen::MatrixXi &tets, Eigen::MatrixXf &nodes) {
     impl->getSurfaceIndices(tris, tets, nodes);
+}
+
+void FTetWildWrapper::setProgressCallback(ProgressCallback cb) {
+    impl->progress_cb = std::move(cb);
 }

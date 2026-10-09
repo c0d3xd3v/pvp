@@ -54,5 +54,35 @@ PYBIND11_MODULE(pyFloatTetwildWrapper, m)
                     },
                     "save mesh", py::arg("path"),
                     py::call_guard<py::gil_scoped_release>())
+                .def(
+                    "setProgressCallback", [](FTetWildWrapper &t, py::object cb)
+                    {
+                        if (cb.is_none()) {
+                            t.setProgressCallback(nullptr);
+                            return;
+                        }
+                        // shared_ptr so the Python callable survives until
+                        // the C++ std::function is destroyed; its destructor
+                        // runs under the GIL via py::gil_scoped_acquire below.
+                        auto holder = std::shared_ptr<py::object>(
+                            new py::object(cb),
+                            [](py::object* p) {
+                                py::gil_scoped_acquire gil;
+                                delete p;
+                            });
+                        t.setProgressCallback(
+                            [holder](const std::string& stage, int it, int total)
+                            {
+                                // Called from a TBB worker without GIL.
+                                py::gil_scoped_acquire gil;
+                                try {
+                                    (*holder)(stage, it, total);
+                                } catch (const py::error_already_set&) {
+                                    PyErr_Clear();
+                                }
+                            });
+                    },
+                    "progress callback fn(stage: str, it: int, total: int)",
+                    py::arg("callback"))
             ;
 }

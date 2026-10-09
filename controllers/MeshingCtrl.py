@@ -9,7 +9,8 @@ from meshing.FTetWildMesher import FTetWildMesher
 
 class _MeshingWorker(QObject):
     """Runs on a background QThread. Owns no VTK/GUI state."""
-    finished = Signal(bool, object)  # success, MeshingResult or None
+    finished = Signal(bool, object)   # success, MeshingResult or None
+    progress = Signal(str, float)     # stage label, fraction (NaN = indeterminate)
 
     def __init__(self, mesher, vertices, triangles, params):
         super().__init__()
@@ -21,7 +22,8 @@ class _MeshingWorker(QObject):
     @Slot()
     def run(self):
         try:
-            result = self.__mesher.mesh(self.__V, self.__F, self.__params)
+            result = self.__mesher.mesh(self.__V, self.__F, self.__params,
+                                        progress=self.progress.emit)
             self.finished.emit(True, result)
         except Exception as e:
             print(f"Meshing failed: {e}")
@@ -31,7 +33,8 @@ class _MeshingWorker(QObject):
 
 class MeshingCtrl(QObject):
     meshingStarted  = Signal()
-    meshingFinished = Signal(bool)  # True = success, False = failure
+    meshingFinished = Signal(bool)        # True = success, False = failure
+    progressChanged = Signal(str, float)  # stage label, fraction (NaN = indeterminate)
 
     def __init__(self):
         super().__init__()
@@ -92,6 +95,7 @@ class MeshingCtrl(QObject):
         self.__worker.finished.connect(self.__on_worker_finished)          # GUI-thread
         self.__worker.finished.connect(self.__thread.quit)                 # bg-thread
         self.__worker.finished.connect(self.__worker.deleteLater)
+        self.__worker.progress.connect(self.progressChanged)               # auto-queued → GUI
         self.__thread.finished.connect(self.__thread.deleteLater)
         # When the C++ QThread object is destroyed, forget our reference
         self.__thread.destroyed.connect(self.__on_thread_destroyed)

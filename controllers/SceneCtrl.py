@@ -93,7 +93,7 @@ class SceneCtrl(QObject):
             self.__render()
 
     def __prepare_rendering(self):
-        if self.__vtkitem and self.__polydata:
+        if self.__vtkitem and self.__vtkitem.renderer and self.__polydata:
             self.__remove_all_actors()
             self.__result_actor = None
             self.__actor = FaceSelectionActor()
@@ -177,7 +177,7 @@ class SceneCtrl(QObject):
     # --- results ---------------------------------------------------------
 
     def __prepare_result_rendering(self):
-        if self.__vtkitem and self.__polydata:
+        if self.__vtkitem and self.__vtkitem.renderer and self.__polydata:
             self.__remove_all_actors()
             self.__actor = None
             self.partitions.detach()

@@ -19,7 +19,13 @@ from PySide6.QtCore            import Qt
 from PySide6.QtGui             import QGuiApplication, QIcon
 from PySide6.QtWidgets         import QApplication
 from PySide6.QtQml             import QQmlApplicationEngine
+from PySide6.QtQuick           import QQuickWindow, QSGRendererInterface
 from PySide6.QtQuickControls2  import QQuickStyle
+
+# VTK renders into a QOpenGLFramebufferObject — only compatible with Qt Quick's
+# OpenGL RHI backend. On Windows Qt 6 defaults to Direct3D 11, leaving the
+# VTKItem blank; force OpenGL before any QGuiApplication/QQuickWindow exists.
+QQuickWindow.setGraphicsApi(QSGRendererInterface.OpenGLRhi)
 
 
 def _compile_resources():

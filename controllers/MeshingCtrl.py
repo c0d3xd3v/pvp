@@ -10,7 +10,9 @@ from meshing.FTetWildMesher import FTetWildMesher
 class _MeshingWorker(QObject):
     """Runs on a background QThread. Owns no VTK/GUI state."""
     finished = Signal(bool, object)   # success, MeshingResult or None
-    progress = Signal(str, float)     # stage label, fraction (NaN = indeterminate)
+    # stage label, fraction (NaN = indeterminate), max_energy (NaN outside the
+    # optimization loop), v_num, t_num (-1 outside the optimization loop)
+    progress = Signal(str, float, float, int, int)
 
     def __init__(self, mesher, vertices, triangles, params):
         super().__init__()
@@ -34,7 +36,9 @@ class _MeshingWorker(QObject):
 class MeshingCtrl(QObject):
     meshingStarted  = Signal()
     meshingFinished = Signal(bool)        # True = success, False = failure
-    progressChanged = Signal(str, float)  # stage label, fraction (NaN = indeterminate)
+    # stage label, fraction (NaN = indeterminate), max_energy (NaN outside
+    # optimization), v_num, t_num (-1 outside optimization)
+    progressChanged = Signal(str, float, float, int, int)
 
     def __init__(self):
         super().__init__()
@@ -57,6 +61,7 @@ class MeshingCtrl(QObject):
         m = self.__meshers.get(mesher_name)
         if not m:
             return []
+        bbox_diag = self.__current_bbox_diagonal()
         return [{
             "name":    p.name,
             "label":   p.label,
@@ -65,7 +70,21 @@ class MeshingCtrl(QObject):
             "max":     p.max_value,
             "step":    p.step,
             "tooltip": p.tooltip,
-        } for p in m.param_schema]
+        } for p in m.param_schema(bbox_diag)]
+
+    def __current_bbox_diagonal(self) -> float | None:
+        """Diagonal of the bbox of the currently loaded surface, in model
+        units — mesher schema uses it to compute sensible defaults for
+        absolute-unit parameters."""
+        if self.__preproc_ctrl is None:
+            return None
+        surf = self.__preproc_ctrl.get_session().surface
+        if surf is None or surf.data is None:
+            return None
+        V = np.asarray(surf.data.get_vertices(), dtype=np.float64)
+        if V.size == 0:
+            return None
+        return float(np.linalg.norm(V.max(axis=0) - V.min(axis=0)))
 
     @Slot(str, 'QVariantMap', result=bool)
     def runMesher(self, mesher_name: str, params) -> bool:

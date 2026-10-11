@@ -26,7 +26,11 @@ public:
     FTetWildWrapper(double stop_energy = 10.0, double ideal_edge_length_rel = 0.05, double eps_rel = 0.001);
     ~FTetWildWrapper();
 
-    using ProgressCallback = std::function<void(const std::string& stage, int it, int total)>;
+    // Progress reporting. During the optimization loop, max_energy carries the
+    // current worst tet quality and v_num/t_num the current vertex / tet
+    // counts; outside the loop they are NaN / -1.
+    using ProgressCallback = std::function<void(const std::string& stage, int it, int total,
+                                                double max_energy, int v_num, int t_num)>;
 
     void loadMeshGeometry(Eigen::MatrixXf &nodes, Eigen::MatrixXi &tris);
     void tetrahedralize();

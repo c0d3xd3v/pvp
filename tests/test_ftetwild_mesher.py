@@ -8,8 +8,13 @@ from meshing.FTetWildMesher import FTetWildMesher   # noqa: E402
 
 def test_parameters_reach_ftetwild(unit_cube):
     P, T, F = unit_cube
-    coarse = FTetWildMesher().mesh(P, F, {"ideal_edge_length_rel": 0.3})
-    fine = FTetWildMesher().mesh(P, F, {"ideal_edge_length_rel": 0.05})
+    # Unit cube: bbox diagonal = sqrt(3). Edge lengths picked so fine << coarse
+    # relative to that diagonal (the two values below match the former
+    # 0.3 / 0.05 relative-to-bbox-diagonal defaults).
+    import numpy as np
+    bbox_diag = float(np.linalg.norm(P.max(axis=0) - P.min(axis=0)))
+    coarse = FTetWildMesher().mesh(P, F, {"ideal_edge_length": 0.3 * bbox_diag})
+    fine   = FTetWildMesher().mesh(P, F, {"ideal_edge_length": 0.05 * bbox_diag})
     assert len(fine.tetrahedra) > 2 * len(coarse.tetrahedra)
 
 

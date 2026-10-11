@@ -2,6 +2,7 @@
 
 #include <tbb/global_control.h>
 #include <chrono>
+#include <limits>
 #include <mutex>
 #include <thread>
 #include <memory>
@@ -131,7 +132,11 @@ public:
     std::chrono::steady_clock::time_point last_emit;
 
     // Max emit rate ~10 Hz; stage changes always pass through.
-    void emit_progress(const std::string& stage, int it, int total, bool force) {
+    // max_energy / v_num / t_num default to NaN / -1 — only the optimization
+    // loop knows them.
+    void emit_progress(const std::string& stage, int it, int total, bool force,
+                       double max_energy = std::numeric_limits<double>::quiet_NaN(),
+                       int v_num = -1, int t_num = -1) {
         if (!progress_cb)
             return;
         std::lock_guard<std::mutex> lk(progress_mutex);
@@ -140,7 +145,7 @@ public:
                           now - last_emit).count() < 100)
             return;
         last_emit = now;
-        progress_cb(stage, it, total);
+        progress_cb(stage, it, total, max_energy, v_num, t_num);
     }
 
     FTetWildWrapperImpl(double stop_energy, double ideal_edge_length_rel, double eps_rel)
@@ -210,8 +215,9 @@ public:
         // Hand our throttled dispatcher into fTetWild for the inner opt loop.
         if (progress_cb) {
             mesh->params.progress_callback =
-                [this](const std::string& stage, int it, int total) {
-                    emit_progress(stage, it, total, false);
+                [this](const std::string& stage, int it, int total,
+                       double max_energy, int v_num, int t_num) {
+                    emit_progress(stage, it, total, false, max_energy, v_num, t_num);
                 };
         }
 

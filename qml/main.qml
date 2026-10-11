@@ -106,6 +106,13 @@ ApplicationWindow {
         width: 36
     }
 
+    // Live meshing status; shows itself only while the mesher is running.
+    MeshingStatusPanel {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 12
+    }
+
     // Called last, once the window is complete
     Component.onCompleted: {
         // Notify the controller here

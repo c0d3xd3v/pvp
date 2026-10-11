@@ -71,18 +71,21 @@ PYBIND11_MODULE(pyFloatTetwildWrapper, m)
                                 delete p;
                             });
                         t.setProgressCallback(
-                            [holder](const std::string& stage, int it, int total)
+                            [holder](const std::string& stage, int it, int total,
+                                     double max_energy, int v_num, int t_num)
                             {
                                 // Called from a TBB worker without GIL.
                                 py::gil_scoped_acquire gil;
                                 try {
-                                    (*holder)(stage, it, total);
+                                    (*holder)(stage, it, total, max_energy, v_num, t_num);
                                 } catch (const py::error_already_set&) {
                                     PyErr_Clear();
                                 }
                             });
                     },
-                    "progress callback fn(stage: str, it: int, total: int)",
+                    "progress callback fn(stage: str, it: int, total: int, "
+                    "max_energy: float, v_num: int, t_num: int). max_energy=NaN "
+                    "and v_num=t_num=-1 outside the optimization loop.",
                     py::arg("callback"))
             ;
 }

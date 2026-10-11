@@ -5,23 +5,17 @@ import numpy as np
 from meshing.TetMesher import ParamSpec, MeshingResult, ProgressFn
 
 
+# fTetWild expresses edge length and surface tolerance relative to the input
+# bbox diagonal. We expose both to the user as absolute values in model units
+# (mm — the project assumes STL input is in mm) and convert here. Defaults are
+# the usual relative fractions, so a fresh surface produces the same mesh as
+# before this unit change.
+_EDGE_DEFAULT_FRAC = 0.05
+_EPS_DEFAULT_FRAC = 0.0002
+
+
 class FTetWildMesher:
     name = "FloatTetwild"
-    param_schema = [
-        ParamSpec("stop_energy", "Stop Energy",
-                  default=10.0, min_value=5.0, max_value=100.0, step=1.0,
-                  tooltip="Quality target of the tet optimization. Lower = better tets, "
-                          "slower. Limited effect (capped at 80 iterations)."),
-        ParamSpec("ideal_edge_length_rel", "Edge Length (rel)",
-                  default=0.05, min_value=0.005, max_value=0.5, step=0.005,
-                  tooltip="Target edge length relative to the bbox diagonal. Mainly controls "
-                          "the interior; at the surface, epsilon and geometry dominate."),
-        ParamSpec("eps_rel", "Epsilon (rel)",
-                  default=0.0002, min_value=0.0001, max_value=0.01, step=0.0001,
-                  tooltip="Max. deviation of the new surface from the input, relative to the "
-                          "bbox diagonal. Smaller = surface detail is kept, but many more "
-                          "tets. 0.001 = coarse/faceted."),
-    ]
 
     _STAGE_LABEL = {
         "preprocessing":      "Preprocessing…",
@@ -34,22 +28,58 @@ class FTetWildMesher:
         "done":               "Finishing…",
     }
 
+    def param_schema(self, bbox_diagonal: float | None = None) -> list[ParamSpec]:
+        # Fallback diagonal when no surface is loaded yet — keeps the UI
+        # usable with reasonable defaults. 1000 mm matches fTetWild's internal
+        # target scale.
+        d = float(bbox_diagonal) if bbox_diagonal and bbox_diagonal > 0 else 1000.0
+        edge_default = d * _EDGE_DEFAULT_FRAC
+        eps_default = d * _EPS_DEFAULT_FRAC
+        return [
+            ParamSpec("stop_energy", "Stop Energy",
+                      default=10.0, min_value=5.0, max_value=100.0, step=1.0,
+                      tooltip="Quality target of the tet optimization. Lower = better tets, "
+                              "slower. Limited effect (capped at 80 iterations)."),
+            ParamSpec("ideal_edge_length", "Edge Length (mm)",
+                      default=edge_default,
+                      min_value=max(edge_default * 1e-3, 1e-6),
+                      max_value=d,
+                      step=self._nice_step(edge_default),
+                      tooltip="Target edge length in model units (mm). Default = 5% of the "
+                              "bbox diagonal. Mainly controls the interior; at the surface, "
+                              "epsilon and geometry dominate."),
+            ParamSpec("eps", "Epsilon (mm)",
+                      default=eps_default,
+                      min_value=max(eps_default * 1e-2, 1e-9),
+                      max_value=d * 0.05,
+                      step=self._nice_step(eps_default),
+                      tooltip="Max. deviation of the new surface from the input, in mm. "
+                              "Default = 0.02% of the bbox diagonal. Smaller = surface "
+                              "detail is kept, but many more tets."),
+        ]
+
     def mesh(self, vertices, triangles, params, progress: ProgressFn | None = None):
         # Import here so the app runs even if the wrapper isn't built yet
         from pyFloatTetwildWrapper import FTetWildWrapper
 
         V = np.asarray(vertices, dtype=np.float64)
         F = np.asarray(triangles, dtype=np.int32)
+        bbox_diag = float(np.linalg.norm(V.max(axis=0) - V.min(axis=0)))
+        if bbox_diag <= 0.0:
+            raise ValueError("input surface has zero extent")
         V_scaled, scale, translation = self._scale_to_box(V)
 
+        edge_mm = float(params.get("ideal_edge_length", bbox_diag * _EDGE_DEFAULT_FRAC))
+        eps_mm = float(params.get("eps", bbox_diag * _EPS_DEFAULT_FRAC))
         w = FTetWildWrapper(
             stop_energy=float(params.get("stop_energy", 10.0)),
-            ideal_edge_length_rel=float(params.get("ideal_edge_length_rel", 0.05)),
-            eps_rel=float(params.get("eps_rel", 0.0002)),
+            ideal_edge_length_rel=edge_mm / bbox_diag,
+            eps_rel=eps_mm / bbox_diag,
         )
 
         if progress is not None:
-            def _bridge(stage: str, it: int, total: int):
+            def _bridge(stage: str, it: int, total: int,
+                        max_energy: float, v_num: int, t_num: int):
                 label = self._STAGE_LABEL.get(stage, stage)
                 if stage == "optimizing" and total > 0:
                     label = f"Optimizing ({it}/{total})"
@@ -57,7 +87,7 @@ class FTetWildMesher:
                 else:
                     frac = math.nan
                 try:
-                    progress(label, frac)
+                    progress(label, frac, max_energy, v_num, t_num)
                 except Exception:
                     pass
             # setProgressCallback exists on patched wrappers only; fall back
@@ -75,6 +105,14 @@ class FTetWildMesher:
             triangles=np.asarray(tris, dtype=np.int32),
             tetrahedra=np.asarray(tets, dtype=np.int32),
         )
+
+    @staticmethod
+    def _nice_step(x: float) -> float:
+        """Round-ish step size one order of magnitude below x, so the UI
+        spinner moves in sensible increments regardless of mesh scale."""
+        if x <= 0:
+            return 0.001
+        return 10 ** math.floor(math.log10(x) - 1)
 
     @staticmethod
     def _scale_to_box(V, target_size: float = 1000.0):

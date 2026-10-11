@@ -13,6 +13,7 @@ QML_FILES = [
     "main.qml", "SidePage.qml", "ToolbarPage.qml", "ExportDialog.qml",
     "OpenMeshFileDialog.qml", "SolutionControl.qml",
     "TriangleMeshRenderingControls.qml", "TriangleMeshToolsControls.qml",
+    "MeshingStatusPanel.qml",
     "partitioning/PartitionList.qml",
 ]
 
@@ -42,7 +43,8 @@ def _check_meshing_and_export():
     m = unit_cube.GenerateMesh(maxh=0.5)
     P = np.array([[p[0], p[1], p[2]] for p in m.Points()])
     F = np.array([[int(v.nr) - 1 for v in e.vertices] for e in m.Elements2D()])
-    r = FTetWildMesher().mesh(P, F, {"ideal_edge_length_rel": 0.3, "eps_rel": 0.001})
+    # Unit cube bbox diagonal = sqrt(3) ≈ 1.732; pick coarse abs params for speed.
+    r = FTetWildMesher().mesh(P, F, {"ideal_edge_length": 0.52, "eps": 0.0017})
     print(f"  fTetWild ok: {len(r.tetrahedra)} tets")
 
     with tempfile.TemporaryDirectory() as d:

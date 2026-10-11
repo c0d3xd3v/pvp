@@ -18,6 +18,7 @@
         <file alias="TriangleMeshToolsControls.qml">../qml/TriangleMeshToolsControls.qml</file>
         <file alias="OpenMeshFileDialog.qml">../qml/OpenMeshFileDialog.qml</file>
         <file alias="ExportDialog.qml">../qml/ExportDialog.qml</file>
+        <file alias="MeshingStatusPanel.qml">../qml/MeshingStatusPanel.qml</file>
         <file alias="ToolbarPage.qml">../qml/ToolbarPage.qml</file>
         <file alias="partitioning/PartitionList.qml">../qml/partitioning/PartitionList.qml</file>
      </qresource>

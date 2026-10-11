@@ -21,14 +21,21 @@ class MeshingResult:
     tetrahedra: np.ndarray  # (K, 4) int
 
 
-# Progress callback: (stage_label, fraction). fraction is in [0, 1] when
-# known, or float('nan') to request an indeterminate indicator.
-ProgressFn = Callable[[str, float], None]
+# Progress callback: (stage_label, fraction, max_energy, v_num, t_num).
+# fraction is in [0, 1] when known or float('nan') for indeterminate.
+# max_energy is NaN and v_num / t_num are -1 outside the main optimization
+# phase (where metrics aren't available).
+ProgressFn = Callable[[str, float, float, int, int], None]
 
 
 class TetMesher(Protocol):
     name: str
-    param_schema: list[ParamSpec]
+
+    def param_schema(self, bbox_diagonal: float | None = None) -> list[ParamSpec]:
+        """Return the parameter schema. When a bbox diagonal (in model units)
+        is given, absolute-unit parameters get sensible defaults for that
+        geometry."""
+        ...
 
     def mesh(self, vertices: np.ndarray, triangles: np.ndarray,
              params: dict,

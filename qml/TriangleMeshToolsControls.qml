@@ -102,6 +102,21 @@ Item {
                     return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
                 }
 
+                // Number.toString() flips to scientific notation around 1e-7,
+                // which the StandardNotation validator rejects. Use decimal
+                // text with roughly 4 significant digits, trailing zeros
+                // trimmed.
+                function formatParam(x) {
+                    if (x === 0 || !isFinite(x)) return "0";
+                    var abs = Math.abs(x);
+                    var mag = Math.floor(Math.log10(abs));
+                    var decimals = Math.max(0, Math.min(9, 3 - mag));
+                    var s = x.toFixed(decimals);
+                    if (s.indexOf('.') >= 0)
+                        s = s.replace(/0+$/, "").replace(/\.$/, "");
+                    return s;
+                }
+
                 Connections {
                     target: MeshingCtrl
                     function onMeshingStarted() {
@@ -116,9 +131,20 @@ Item {
                         meshingTab.stageLabel = success ? "Done" : "Cancelled / failed"
                         meshingTab.stageFraction = success ? 1.0 : NaN
                     }
-                    function onProgressChanged(stage, fraction) {
+                    function onProgressChanged(stage, fraction, maxEnergy, vNum, tNum) {
                         meshingTab.stageLabel = stage
                         meshingTab.stageFraction = fraction
+                    }
+                }
+
+                // Absolute-unit defaults (edge length, epsilon) depend on
+                // the current surface's bbox — refresh the schema so a newly
+                // loaded surface gets sensible numbers.
+                Connections {
+                    target: PreProcCtrl
+                    function onSessionChanged() {
+                        meshingTab.schema =
+                            MeshingCtrl.getSchema(meshingTab.currentMesher)
                     }
                 }
 
@@ -160,13 +186,13 @@ Item {
                         }
                         TextField {
                             Layout.fillWidth: true
-                            text: Number(modelData.default).toString()
+                            text: meshingTab.formatParam(modelData.default)
                             horizontalAlignment: TextInput.AlignRight
                             selectByMouse: true
                             validator: DoubleValidator {
                                 bottom: modelData.min
                                 top:    modelData.max
-                                decimals: 6
+                                decimals: 9
                                 notation: DoubleValidator.StandardNotation
                             }
                             onTextChanged: {

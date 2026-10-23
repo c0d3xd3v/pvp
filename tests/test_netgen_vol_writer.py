@@ -4,6 +4,7 @@ import pytest
 
 from fileio.NetgenVolWriter import write_vol
 from fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
+from fileio.export_model import ExportMesh, BCGroup
 
 
 def scrambled(T, F):
@@ -18,7 +19,7 @@ def scrambled(T, F):
 def split_groups(P, F):
     on_x0 = np.where(np.all(np.isclose(P[F][:, :, 0], 0.0), axis=1))[0]
     rest = np.setdiff1d(np.arange(len(F)), on_x0)
-    return [("inlet", on_x0.tolist()), ("wall", rest.tolist())]
+    return [BCGroup("inlet", on_x0), BCGroup("wall", rest)]
 
 
 @pytest.fixture
@@ -27,7 +28,7 @@ def written(tmp_path, unit_cube):
     T, F = scrambled(T, F)
     groups = split_groups(P, F)
     path = str(tmp_path / "cube.vol")
-    write_vol(path, P, T, F, groups)
+    write_vol(path, ExportMesh(nodes=P, tets=T, surface_tri=F, bc_groups=groups))
     return path, P, T, F, groups
 
 
@@ -69,7 +70,7 @@ def test_reimport(written):
     assert len(data.get_triangles()) == len(F)
     assert data.get_bc_names() == {1: "inlet", 2: "wall"}
     bcs = np.array(data.get_triangle_bcs())
-    assert (bcs == 1).sum() == len(groups[0][1])
+    assert (bcs == 1).sum() == len(groups[0].triangles)
 
 
 def test_triangle_not_on_a_tet_is_rejected(tmp_path, unit_cube):
@@ -78,4 +79,6 @@ def test_triangle_not_on_a_tet_is_rejected(tmp_path, unit_cube):
     if any(set(bad[0]) <= set(t) for t in T):
         pytest.skip("random triangle happens to be a tet face")
     with pytest.raises(ValueError):
-        write_vol(str(tmp_path / "bad.vol"), P, T, bad, [("x", [0])])
+        write_vol(str(tmp_path / "bad.vol"),
+                  ExportMesh(nodes=P, tets=T, surface_tri=bad,
+                             bc_groups=[BCGroup("x", np.array([0]))]))

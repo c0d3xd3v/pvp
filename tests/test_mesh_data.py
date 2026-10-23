@@ -7,6 +7,7 @@ from geometry.OBBMeshGenerator import OBBMeshGenerator
 from fileio.NetgenVolWriter import write_vol
 from fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
 from fileio.SurfaceMeshGeometryFile import TriangleSurfaceMeshGeometryFile
+from fileio.export_model import ExportMesh, BCGroup
 
 
 def test_surface_only_defaults(tmp_path, unit_cube):
@@ -39,7 +40,8 @@ def test_numpy_tetrahedra_have_no_truthiness_problem(unit_cube):
 def test_volume_file(tmp_path, unit_cube):
     P, T, F = unit_cube
     path = str(tmp_path / "cube.vol")
-    write_vol(path, P, T, F, [("wall", list(range(len(F))))])
+    write_vol(path, ExportMesh(nodes=P, tets=T, surface_tri=F,
+                               bc_groups=[BCGroup("wall", np.arange(len(F)))]))
     data = TetrahedralVolumeMeshGeometryFile(path)
     assert isinstance(data, AbstractGeometryData)
     assert data.has_tetrahedra()

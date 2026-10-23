@@ -10,6 +10,7 @@ from geometry.MeshRole import MeshRole
 from geometry.AbstractMeshData import AbstractGeometryData
 from geometry.InMemoryMeshData import InMemoryMeshData
 from fileio.NetgenVolWriter import write_vol
+from fileio.export_model import ExportMesh, BCGroup
 
 
 class PreProcCtrl(QObject):
@@ -199,14 +200,14 @@ class PreProcCtrl(QObject):
             return False
         return vol_mesh.data.has_tetrahedra() and len(vol_mesh.data.get_triangles()) > 0
 
-    def __collect_bc_groups(self, n_triangles: int) -> list[tuple[str, list[int]]]:
+    def __collect_bc_groups(self, n_triangles: int) -> list[BCGroup]:
         """Map the current partitions to triangle groups via the FaceSelectionActor's
         PartitionIds cell array (the source of truth for who owns what). Every
         triangle must end up in some group, otherwise the exported surface has
         holes; unassigned triangles go into a "default" group."""
         part_ids = self.__scene_ctrl.partitions.ids_per_cell() if self.__scene_ctrl else None
         if part_ids is None:
-            return [("default", list(range(n_triangles)))]
+            return [BCGroup("default", np.arange(n_triangles, dtype=np.int64))]
         if part_ids.shape[0] != n_triangles:
             raise ValueError(f"surface has {part_ids.shape[0]} triangles but the volume mesh "
                              f"boundary has {n_triangles}; they must be the same surface")
@@ -216,12 +217,23 @@ class PreProcCtrl(QObject):
         for p in self.__scene_ctrl.partitions.all():
             indices = np.where(part_ids == p.id)[0]
             if indices.size:
-                groups.append((p.name, indices.tolist()))
+                groups.append(BCGroup(p.name, indices.astype(np.int64)))
                 assigned[indices] = True
         unassigned = np.where(~assigned)[0]
         if unassigned.size:
-            groups.append(("default", unassigned.tolist()))
+            groups.append(BCGroup("default", unassigned.astype(np.int64)))
         return groups
+
+    def __build_export_mesh(self) -> ExportMesh:
+        data = self.__session.volume.data
+        tris = data.get_triangles()
+        groups = self.__collect_bc_groups(len(tris))
+        return ExportMesh(
+            nodes=data.get_vertices(),
+            tets=data.get_tetrahedra(),
+            surface_tri=tris,
+            bc_groups=groups,
+        )
 
     @Slot(result='QVariantMap')
     def getExportSummary(self) -> dict:
@@ -234,8 +246,8 @@ class PreProcCtrl(QObject):
             groups = self.__collect_bc_groups(len(data.get_triangles()))
         except ValueError:
             groups = []
-        named = [g for g in groups if g[0] != "default"]
-        unassigned = sum(len(g[1]) for g in groups if g[0] == "default")
+        named = [g for g in groups if g.name != "default"]
+        unassigned = sum(len(g.triangles) for g in groups if g.name == "default")
         return {"boundaries": len(named), "unassigned": unassigned,
                 "tets": len(data.get_tetrahedra())}
 
@@ -251,15 +263,14 @@ class PreProcCtrl(QObject):
         if not self.canExportVolume():
             return "No volume mesh to export."
 
-        data = self.__session.volume.data
         try:
-            groups = self.__collect_bc_groups(len(data.get_triangles()))
-            write_vol(file_path, data.get_vertices(), data.get_tetrahedra(),
-                      data.get_triangles(), groups)
+            mesh = self.__build_export_mesh()
+            write_vol(file_path, mesh)
         except Exception as e:
             print(f"exportVolume failed: {e}")
             return str(e)
-        print(f"Exported {file_path}: " + ", ".join(f"{n} ({len(i)})" for n, i in groups))
+        print(f"Exported {file_path}: "
+              + ", ".join(f"{g.name} ({len(g.triangles)})" for g in mesh.bc_groups))
         return ""
 
     @Slot(result='QVariantList')

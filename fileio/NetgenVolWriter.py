@@ -1,6 +1,8 @@
 import numpy as np
 import netgen.meshing as nm
 
+from fileio.export_model import ExportMesh
+
 
 def _orient_tets(P, T):
     """Netgen's own meshes use tets with negative det(p1-p0, p2-p0, p3-p0);
@@ -34,32 +36,26 @@ def _orient_boundary(P, T, F):
     return F
 
 
-def write_vol(path, vertices, tetrahedra, triangles, groups):
-    """Write a Netgen .vol volume mesh.
+def write_vol(path: str, mesh: ExportMesh):
+    """Write a Netgen .vol volume mesh. Linear tets only (Netgen's own format
+    carries that; quadratic export goes to Gmsh/CalculiX instead)."""
+    P = mesh.nodes
+    T = _orient_tets(P, mesh.tets)
+    F = _orient_boundary(P, T, mesh.surface_tri)
 
-    vertices   (N, 3) coordinates
-    tetrahedra (K, 4) 0-based vertex indices
-    triangles  (M, 3) 0-based vertex indices of the boundary surface
-    groups     [(bc_name, [triangle indices]), ...] — every triangle should be
-               in exactly one group, otherwise the exported surface has holes.
-    """
-    P = np.asarray(vertices, dtype=np.float64)
-    T = _orient_tets(P, np.asarray(tetrahedra, dtype=np.int64))
-    F = _orient_boundary(P, T, np.asarray(triangles, dtype=np.int64))
-
-    mesh = nm.Mesh(dim=3)
+    out = nm.Mesh(dim=3)
     # nm.Pnt: Point3d was removed in newer netgen releases (e.g. 6.2.2608)
-    pids = [mesh.Add(nm.MeshPoint(nm.Pnt(*p))) for p in P]
+    pids = [out.Add(nm.MeshPoint(nm.Pnt(*p))) for p in P]
 
-    for i, (name, indices) in enumerate(groups):
-        fd = mesh.Add(nm.FaceDescriptor(bc=i + 1, domin=1, domout=0, surfnr=i + 1))
+    for i, g in enumerate(mesh.bc_groups):
+        fd = out.Add(nm.FaceDescriptor(bc=i + 1, domin=1, domout=0, surfnr=i + 1))
         # SetBCName is 0-based (index into netgen's names array) even though
         # bc numbers themselves are 1-based.
-        mesh.SetBCName(i, name)
-        for k in indices:
-            mesh.Add(nm.Element2D(fd, [pids[v] for v in F[k]]))
+        out.SetBCName(i, g.name)
+        for k in g.triangles:
+            out.Add(nm.Element2D(fd, [pids[v] for v in F[k]]))
 
     for t in T:
-        mesh.Add(nm.Element3D(1, [pids[v] for v in t]))
+        out.Add(nm.Element3D(1, [pids[v] for v in t]))
 
-    mesh.Save(path)
+    out.Save(path)

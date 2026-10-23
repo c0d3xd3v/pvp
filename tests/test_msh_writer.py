@@ -5,7 +5,7 @@ import numpy as np
 import meshio
 import pytest
 
-from fileio.MshWriter import write_msh_v2
+from fileio.MshWriter import write_msh_v2, write_msh_v4
 from fileio.export_model import ExportMesh, BCGroup
 
 
@@ -32,9 +32,14 @@ def cube_mesh(unit_cube):
 
 
 def _read_cells(path):
+    """Return (mesh, {type: concatenated_data}). v4 can emit one CellBlock per
+    entity, so a plain {cb.type: cb} would drop all but the last BC's block."""
     m = meshio.read(path)
-    # meshio returns one CellBlock per element type; group by name
-    return m, {cb.type: cb for cb in m.cells}
+    buckets: dict = {}
+    for cb in m.cells:
+        buckets.setdefault(cb.type, []).append(cb.data)
+    merged = {t: np.concatenate(blocks, axis=0) for t, blocks in buckets.items()}
+    return m, merged
 
 
 def test_linear_roundtrip(tmp_path, cube_mesh):
@@ -46,8 +51,8 @@ def test_linear_roundtrip(tmp_path, cube_mesh):
     assert np.allclose(m.points, cube_mesh.nodes)
 
     assert set(cells) == {"triangle", "tetra"}
-    assert cells["tetra"].data.shape == cube_mesh.tets.shape
-    assert cells["triangle"].data.shape == cube_mesh.surface_tri.shape
+    assert cells["tetra"].shape == cube_mesh.tets.shape
+    assert cells["triangle"].shape == cube_mesh.surface_tri.shape
 
     # Physical names: 6 BCs + Volume
     names = {k: v for k, v in m.field_data.items()}
@@ -86,8 +91,8 @@ def test_quadratic_roundtrip(tmp_path, cube_mesh):
     assert "triangle6" in cells
 
     # Each tet gained 6 midside columns; each triangle gained 3.
-    assert cells["tetra10"].data.shape == (cube_mesh.tets.shape[0], 10)
-    assert cells["triangle6"].data.shape == (cube_mesh.surface_tri.shape[0], 6)
+    assert cells["tetra10"].shape == (cube_mesh.tets.shape[0], 10)
+    assert cells["triangle6"].shape == (cube_mesh.surface_tri.shape[0], 6)
 
     # Midside node count = unique undirected tet edges
     T = cube_mesh.tets
@@ -96,6 +101,29 @@ def test_quadratic_roundtrip(tmp_path, cube_mesh):
         T[:, [0, 3]], T[:, [1, 3]], T[:, [2, 3]],
     ]), axis=1)
     assert m.points.shape[0] == cube_mesh.nodes.shape[0] + len(np.unique(pairs, axis=0))
+
+
+@pytest.mark.parametrize("quadratic", [False, True])
+def test_v4_roundtrip(tmp_path, cube_mesh, quadratic):
+    path = tmp_path / "cube.msh"
+    write_msh_v4(str(path), cube_mesh, quadratic=quadratic)
+    m, cells = _read_cells(str(path))
+
+    assert np.allclose(m.points[: cube_mesh.nodes.shape[0]], cube_mesh.nodes)
+
+    tet_type = "tetra10" if quadratic else "tetra"
+    tri_type = "triangle6" if quadratic else "triangle"
+    assert tet_type in cells
+    assert tri_type in cells
+    assert cells[tet_type].shape[0] == cube_mesh.tets.shape[0]
+    assert cells[tri_type].shape[0] == cube_mesh.surface_tri.shape[0]
+
+    # Each BC's triangles should carry its own physical tag.
+    tri_phys = m.cell_data_dict["gmsh:physical"][tri_type]
+    name_to_tag = {name: tag for name, (tag, _dim) in m.field_data.items()}
+    for g in cube_mesh.bc_groups:
+        tag = name_to_tag[g.name]
+        assert int((tri_phys == tag).sum()) == len(g.triangles)
 
 
 def test_quadratic_midside_lies_on_edge(tmp_path, cube_mesh):
@@ -108,7 +136,7 @@ def test_quadratic_midside_lies_on_edge(tmp_path, cube_mesh):
     m, cells = _read_cells(str(path))
 
     pts = m.points
-    tet10 = cells["tetra10"].data
+    tet10 = cells["tetra10"]
     for i, (a, b) in enumerate([(0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3)]):
         mids = pts[tet10[:, 4 + i]]
         expected = 0.5 * (pts[tet10[:, a]] + pts[tet10[:, b]])

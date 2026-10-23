@@ -4,7 +4,7 @@ import numpy as np
 
 from PySide6.QtCore import Slot, Signal, QObject, QThread
 
-from meshing.FTetWildMesher import FTetWildMesher
+from meshing.FTetWildMesher import FTetWildMesher, MeshingCancelled
 
 
 class _MeshingWorker(QObject):
@@ -27,6 +27,9 @@ class _MeshingWorker(QObject):
             result = self.__mesher.mesh(self.__V, self.__F, self.__params,
                                         progress=self.progress.emit)
             self.finished.emit(True, result)
+        except MeshingCancelled:
+            print("Meshing cancelled by user")
+            self.finished.emit(False, None)
         except Exception as e:
             print(f"Meshing failed: {e}")
             traceback.print_exc()
@@ -145,25 +148,22 @@ class MeshingCtrl(QObject):
 
     @Slot(result=bool)
     def cancelMesher(self) -> bool:
-        """Hard-cancel the currently running mesher. Uses QThread.terminate(),
-        which is unsafe (may leak the C++ FTetWildWrapper and its internal
-        allocations). Acceptable trade-off for user-triggered abort.
+        """Cooperative cancel of the currently running mesher. Signals the
+        underlying FTetWildWrapper to raise Cancelled at its next progress
+        tick; the worker's exception path then drives the normal cleanup
+        via the finished signal.
+
+        Response time is bounded by one optimizer iteration (seconds), or
+        one stage boundary when the current stage doesn't call back. Older
+        implementations used QThread.terminate(), which crashed the process
+        when it fired while fTetWild / TBB held locks.
         """
         if self.__thread is None or not self.__thread.isRunning():
             return False
-        # terminate() stops the thread forcefully. Signals from the worker
-        # won't fire anymore, so we have to drive the shutdown ourselves.
-        self.__thread.terminate()
-        self.__thread.wait(2000)   # bounded wait; terminate should be near-instant
-        # Qt's deleteLater chain won't run because `worker.finished` never fired.
-        try:
-            if self.__worker is not None:
-                self.__worker.deleteLater()
-            if self.__thread is not None:
-                self.__thread.deleteLater()
-        except RuntimeError:
-            pass
-        self.__thread = None
-        self.__worker = None
-        self.meshingFinished.emit(False)
+        for m in self.__meshers.values():
+            # Each mesher ignores the request when it isn't the one running.
+            try:
+                m.request_cancel()
+            except AttributeError:
+                pass
         return True

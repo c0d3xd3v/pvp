@@ -1,8 +1,13 @@
 import math
+import threading
 
 import numpy as np
 
 from meshing.TetMesher import ParamSpec, MeshingResult, ProgressFn
+
+
+class MeshingCancelled(Exception):
+    """Raised by FTetWildMesher.mesh when a cancel request is honored."""
 
 
 # fTetWild expresses edge length and surface tolerance relative to the input
@@ -16,6 +21,12 @@ _EPS_DEFAULT_FRAC = 0.0002
 
 class FTetWildMesher:
     name = "FloatTetwild"
+
+    def __init__(self):
+        # Guards the reference to the wrapper currently running inside mesh().
+        # request_cancel runs on the GUI thread; mesh() runs on the worker.
+        self._cancel_lock = threading.Lock()
+        self._current_wrapper = None
 
     _STAGE_LABEL = {
         "preprocessing":      "Preprocessing…",
@@ -60,7 +71,8 @@ class FTetWildMesher:
 
     def mesh(self, vertices, triangles, params, progress: ProgressFn | None = None):
         # Import here so the app runs even if the wrapper isn't built yet
-        from pyFloatTetwildWrapper import FTetWildWrapper
+        import pyFloatTetwildWrapper as pyftw
+        FTetWildWrapper = pyftw.FTetWildWrapper
 
         V = np.asarray(vertices, dtype=np.float64)
         F = np.asarray(triangles, dtype=np.int32)
@@ -95,9 +107,20 @@ class FTetWildMesher:
             if hasattr(w, "setProgressCallback"):
                 w.setProgressCallback(_bridge)
 
-        w.loadMeshGeometry(V_scaled, F)
-        w.tetrahedralize()
-        tris, tets, nods = w.getSurfaceIndices()
+        with self._cancel_lock:
+            self._current_wrapper = w
+        try:
+            w.loadMeshGeometry(V_scaled, F)
+            w.tetrahedralize()
+            tris, tets, nods = w.getSurfaceIndices()
+        except pyftw.Cancelled:
+            # fTetWild/TBB stacks are not exception-safe, so the wrapper may
+            # hold half-built state. Dropping our only reference lets Python
+            # tear it down after we unwind.
+            raise MeshingCancelled()
+        finally:
+            with self._cancel_lock:
+                self._current_wrapper = None
 
         nods_out = np.asarray(nods, dtype=np.float64) / scale + translation
         return MeshingResult(
@@ -105,6 +128,19 @@ class FTetWildMesher:
             triangles=np.asarray(tris, dtype=np.int32),
             tetrahedra=np.asarray(tets, dtype=np.int32),
         )
+
+    def request_cancel(self) -> bool:
+        """Signal the running mesh() call to abort at the next progress tick.
+        Safe to call from any thread; no-op if nothing is running."""
+        with self._cancel_lock:
+            w = self._current_wrapper
+        if w is None:
+            return False
+        try:
+            w.requestCancel()
+        except Exception:
+            return False
+        return True
 
     @staticmethod
     def _nice_step(x: float) -> float:

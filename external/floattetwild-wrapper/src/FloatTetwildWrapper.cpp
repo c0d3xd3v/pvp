@@ -1,6 +1,7 @@
 #include "FloatTetwildWrapper.h"
 
 #include <tbb/global_control.h>
+#include <atomic>
 #include <chrono>
 #include <limits>
 #include <mutex>
@@ -130,13 +131,22 @@ public:
     FTetWildWrapper::ProgressCallback progress_cb;
     std::mutex progress_mutex;
     std::chrono::steady_clock::time_point last_emit;
+    std::atomic<bool> cancel_requested{false};
 
     // Max emit rate ~10 Hz; stage changes always pass through.
     // max_energy / v_num / t_num default to NaN / -1 — only the optimization
     // loop knows them.
+    //
+    // Also the cooperative-cancel checkpoint: if cancel_requested is set,
+    // throw Cancelled. fTetWild calls progress_callback at the top of each
+    // optimizer iteration (outside its TBB parallel regions) and the wrapper
+    // also calls emit_progress between its own stages, so the exception
+    // always unwinds on a single thread.
     void emit_progress(const std::string& stage, int it, int total, bool force,
                        double max_energy = std::numeric_limits<double>::quiet_NaN(),
                        int v_num = -1, int t_num = -1) {
+        if (cancel_requested.load(std::memory_order_acquire))
+            throw FTetWildWrapper::Cancelled();
         if (!progress_cb)
             return;
         std::lock_guard<std::mutex> lk(progress_mutex);
@@ -343,4 +353,8 @@ void FTetWildWrapper::getSurfaceIndices(Eigen::MatrixXi &tris, Eigen::MatrixXi &
 
 void FTetWildWrapper::setProgressCallback(ProgressCallback cb) {
     impl->progress_cb = std::move(cb);
+}
+
+void FTetWildWrapper::requestCancel() {
+    impl->cancel_requested.store(true, std::memory_order_release);
 }

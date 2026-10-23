@@ -13,6 +13,17 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(pyFloatTetwildWrapper, m)
 {
+    // Expose Cancelled as a dedicated Python exception so the controller
+    // can distinguish user-triggered abort from a genuine meshing failure.
+    static py::exception<FTetWildWrapper::Cancelled> cancelled_exc(m, "Cancelled");
+
+    py::register_exception_translator([](std::exception_ptr p) {
+        try { if (p) std::rethrow_exception(p); }
+        catch (const FTetWildWrapper::Cancelled& e) {
+            cancelled_exc(e.what());
+        }
+    });
+
     py::class_<FTetWildWrapper>(m, "FTetWildWrapper")
             .def(py::init<
                      double, double, double>(),
@@ -79,6 +90,9 @@ PYBIND11_MODULE(pyFloatTetwildWrapper, m)
                                 try {
                                     (*holder)(stage, it, total, max_energy, v_num, t_num);
                                 } catch (const py::error_already_set&) {
+                                    // Progress reporting must not fail the mesh.
+                                    // Cancellation is signalled via requestCancel(),
+                                    // not by raising from this callback.
                                     PyErr_Clear();
                                 }
                             });
@@ -87,5 +101,10 @@ PYBIND11_MODULE(pyFloatTetwildWrapper, m)
                     "max_energy: float, v_num: int, t_num: int). max_energy=NaN "
                     "and v_num=t_num=-1 outside the optimization loop.",
                     py::arg("callback"))
+            .def(
+                "requestCancel", [](FTetWildWrapper &t) { t.requestCancel(); },
+                "Request cooperative cancellation. The next progress tick inside "
+                "tetrahedralize() raises pyFloatTetwildWrapper.Cancelled. Safe "
+                "to call from any thread.")
             ;
 }

@@ -36,28 +36,33 @@ class ExportMesh:
         self.surface_tri = np.ascontiguousarray(self.surface_tri, dtype=np.int64)
 
 
-# Local-edge layout of the midside columns in the Tet10 connectivity below.
-# Matches Gmsh element type 11; Abaqus/CalculiX C3D10 uses the same undirected
-# edges (its node 8/9/10 label the midnodes on edges 0-3 / 1-3 / 2-3), so no
-# reordering is needed between the two. Writers still verify positions.
+# Canonical local-edge layout for the midside columns of our Tet10 arrays.
+# Matches Abaqus/CalculiX C3D10 (and VTK Lagrange tet). Gmsh element type 11
+# swaps the last two midnodes — writers that target Gmsh use TET10_TO_GMSH to
+# permute cols 8 and 9. The underlying midside *points* are the same for both;
+# only the output position differs.
 _TET10_EDGES = np.array([
     (0, 1),  # col 4
     (1, 2),  # col 5
     (0, 2),  # col 6
     (0, 3),  # col 7
-    (1, 3),  # col 8
-    (2, 3),  # col 9
+    (1, 3),  # col 8  (Abaqus node 9  / Gmsh node 10)
+    (2, 3),  # col 9  (Abaqus node 10 / Gmsh node 9)
 ], dtype=np.int64)
+
+TET10_TO_GMSH = np.array([0, 1, 2, 3, 4, 5, 6, 7, 9, 8], dtype=np.int64)
+
+_TRI6_EDGES = [(0, 1), (1, 2), (0, 2)]
 
 
 def add_midside_nodes(nodes: np.ndarray, tets: np.ndarray):
-    """Return (nodes_ext, tet10) with straight midpoints on every edge.
+    """Return (nodes_ext, tet10, edge_midnode) with straight midpoints on every edge.
 
     Each unique undirected edge produces exactly one midnode, so adjacent tets
     share midnodes along their common edges (which is what Gmsh/CalculiX
-    expect). Column layout of tet10:
-      0..3 -> corner vertices (copied from `tets`)
-      4..9 -> midside nodes on edges in _TET10_EDGES order
+    expect). Column layout of tet10 is the Abaqus-style order documented on
+    _TET10_EDGES. edge_midnode maps (v_low, v_high) → node index, so writers
+    can look up midnodes on surface-triangle edges without rebuilding the map.
     """
     nodes = np.asarray(nodes, dtype=np.float64)
     tets = np.asarray(tets, dtype=np.int64)
@@ -77,4 +82,23 @@ def add_midside_nodes(nodes: np.ndarray, tets: np.ndarray):
     tet10 = np.empty((K, 10), dtype=np.int64)
     tet10[:, :4] = tets
     tet10[:, 4:] = midside_cols
-    return nodes_ext, tet10
+
+    edge_midnode = {
+        (int(a), int(b)): N + i for i, (a, b) in enumerate(unique_pairs)
+    }
+    return nodes_ext, tet10, edge_midnode
+
+
+def tri6_connectivity(triangles: np.ndarray, edge_midnode: dict) -> np.ndarray:
+    """Promote linear surface triangles to Tri6 by looking up midnodes on each
+    triangle edge in a pre-built edge→midnode map (from add_midside_nodes).
+    Column layout matches Gmsh element type 9 and Abaqus STRI65:
+      0..2 -> corners, 3..5 -> midnodes on edges (0,1), (1,2), (0,2).
+    Every triangle edge must be a tet edge, otherwise the lookup fails."""
+    triangles = np.asarray(triangles, dtype=np.int64)
+    tri6 = np.empty((triangles.shape[0], 6), dtype=np.int64)
+    tri6[:, :3] = triangles
+    for i, (a, b) in enumerate(_TRI6_EDGES):
+        pairs = np.sort(np.stack([triangles[:, a], triangles[:, b]], axis=1), axis=1)
+        tri6[:, 3 + i] = [edge_midnode[(int(p[0]), int(p[1]))] for p in pairs]
+    return tri6

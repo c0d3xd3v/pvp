@@ -7,7 +7,10 @@ import numpy as np
 import meshio
 import pytest
 
-from fileio.InpWriter import write_inp_calculix, _OPPOSITE_LOCAL_TO_FACE
+from fileio.InpWriter import (
+    write_inp_calculix, write_inp_abaqus, _OPPOSITE_LOCAL_TO_FACE,
+    _INSTANCE_NAME,
+)
 from fileio.export_model import ExportMesh, BCGroup
 
 
@@ -100,3 +103,40 @@ def test_nset_names_present(tmp_path, cube_mesh):
     text = _read_text(str(path))
     for g in cube_mesh.bc_groups:
         assert f"*NSET, NSET={g.name}" in text
+
+
+@pytest.mark.parametrize("quadratic", [False, True])
+def test_abaqus_meshio_roundtrip(tmp_path, cube_mesh, quadratic):
+    path = tmp_path / "cube.inp"
+    write_inp_abaqus(str(path), cube_mesh, quadratic=quadratic)
+
+    m = meshio.read(str(path))
+    tet_type = "tetra10" if quadratic else "tetra"
+    (tetra,) = [cb for cb in m.cells if cb.type == tet_type]
+    assert tetra.data.shape[0] == cube_mesh.tets.shape[0]
+    assert np.array_equal(tetra.data[:, :4], cube_mesh.tets)
+
+
+def test_abaqus_structure_and_surface_qualified(tmp_path, cube_mesh):
+    """The part/assembly wrapping and INSTANCE= references on *NSET /
+    *SURFACE are what makes this an Abaqus deck rather than a CalculiX one."""
+    path = tmp_path / "cube.inp"
+    write_inp_abaqus(str(path), cube_mesh, quadratic=False)
+    text = _read_text(str(path))
+
+    assert "*PART, NAME=" in text
+    assert "*END PART" in text
+    assert "*ASSEMBLY, NAME=" in text
+    assert "*INSTANCE, NAME=" in text
+    assert "*END ASSEMBLY" in text
+
+    for g in cube_mesh.bc_groups:
+        assert f"*NSET, NSET={g.name}, INSTANCE={_INSTANCE_NAME}" in text
+        # Surface entries must be qualified with the instance name, otherwise
+        # Abaqus can't resolve element ids inside the assembly.
+        m = re.search(
+            rf"\*SURFACE,\s*NAME={re.escape(g.name)},[^\n]*\n(.*?)(?=\n\*|\Z)",
+            text, flags=re.DOTALL,
+        )
+        for line in m.group(1).strip().splitlines():
+            assert line.startswith(f"{_INSTANCE_NAME}."), line

@@ -117,6 +117,10 @@ Item {
         close()
     }
 
+    // True whenever the panel is in its full-size "open" state (as opposed
+    // to the small collapsed square). Used to gate the resize handle.
+    property bool isOpen: sidePanel.width > 80
+
     Rectangle {
         // Translucent Material Dark surface so the 3D view shows through slightly
         color: Qt.rgba(Material.background.r, Material.background.g, Material.background.b, 0.88)
@@ -182,6 +186,49 @@ Item {
                     id: renderingControlLayout
                     width: contentScroll.availableWidth
                 }
+            }
+        }
+
+        // Drag the right edge to resize the sidebar. Enabled only while the
+        // panel is fully expanded, so the collapsed-square state is still
+        // reopened by a single click on the big MouseArea underneath.
+        MouseArea {
+            id: resizeHandle
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 6
+            z: 10
+            cursorShape: Qt.SizeHorCursor
+            hoverEnabled: true
+            enabled: sidePanel.isOpen && !widthAnim.running && !heightAnim.running
+
+            property real pressSceneX: 0
+            property real pressWidth: 0
+
+            onPressed: function(mouse) {
+                mouse.accepted = true
+                var p = mapToItem(null, mouse.x, mouse.y)
+                pressSceneX = p.x
+                pressWidth = sidePanel.width
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) return
+                var p = mapToItem(null, mouse.x, mouse.y)
+                var dx = p.x - pressSceneX
+                var w = Math.max(160, pressWidth + dx)
+                sidePanel.width = w
+                sidebarWidth = w
+            }
+
+            // Subtle visual affordance on hover.
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 2
+                color: Qt.rgba(1, 1, 1, resizeHandle.containsMouse || resizeHandle.pressed ? 0.35 : 0.0)
+                Behavior on color { ColorAnimation { duration: 120 } }
             }
         }
     }

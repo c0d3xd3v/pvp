@@ -135,6 +135,7 @@ ColumnLayout {
                 text: "1.0"
                 validator: DoubleValidator {
                     bottom: 1.0
+                    locale: "C"
                 }
                 onEditingFinished: {
                     if (acceptableInput) {

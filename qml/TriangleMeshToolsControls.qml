@@ -189,11 +189,17 @@ Item {
                             text: meshingTab.formatParam(modelData.default)
                             horizontalAlignment: TextInput.AlignRight
                             selectByMouse: true
+                            // Force C locale so '.' is accepted as the decimal
+                            // separator everywhere. parseFloat below is C-only,
+                            // so a comma from a German locale would validate
+                            // but then parse as truncation (1,5 → 1).
+                            inputMethodHints: Qt.ImhFormattedNumbersOnly
                             validator: DoubleValidator {
                                 bottom: modelData.min
                                 top:    modelData.max
                                 decimals: 9
                                 notation: DoubleValidator.StandardNotation
+                                locale: "C"
                             }
                             onTextChanged: {
                                 var v = parseFloat(text);

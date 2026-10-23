@@ -42,7 +42,7 @@ class FTetWildMesher:
                               "slower. Limited effect (capped at 80 iterations)."),
             ParamSpec("ideal_edge_length", "Edge Length (mm)",
                       default=edge_default,
-                      min_value=max(edge_default * 1e-3, 1e-6),
+                      min_value=1e-6,
                       max_value=d,
                       step=self._nice_step(edge_default),
                       tooltip="Target edge length in model units (mm). Default = 5% of the "
@@ -50,7 +50,7 @@ class FTetWildMesher:
                               "epsilon and geometry dominate."),
             ParamSpec("eps", "Epsilon (mm)",
                       default=eps_default,
-                      min_value=max(eps_default * 1e-2, 1e-9),
+                      min_value=1e-9,
                       max_value=d * 0.05,
                       step=self._nice_step(eps_default),
                       tooltip="Max. deviation of the new surface from the input, in mm. "

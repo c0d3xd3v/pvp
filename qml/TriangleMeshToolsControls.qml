@@ -154,14 +154,9 @@ Item {
                         Math.floor((Date.now() - meshingTab.startedAt) / 1000)
                 }
 
-                Button {
-                    text: "Create BG Mesh"
-                    Layout.fillWidth: true
-                    enabled: meshToolsRoot.meshRoles[0].loaded
-                    onClicked: PreProcCtrl.createBackgroundMesh()
-                }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(1, 1, 1, 0.12) }
+                // "Create BG Mesh" button hidden: the current BG mesh is a
+                // visual AABB placeholder and is not yet wired as a sizing
+                // field into fTetWild. Reinstate once that pipeline lands.
 
                 // Mesher picker hidden while fTetWild is the only backend;
                 // reinstate once a second mesher ships.

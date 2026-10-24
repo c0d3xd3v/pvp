@@ -39,6 +39,7 @@ def _check_meshing_and_export():
     from netgen.csg import unit_cube
     from meshing.FTetWildMesher import FTetWildMesher
     from fileio.NetgenVolWriter import write_vol
+    from fileio.export_model import ExportMesh, BCGroup
 
     m = unit_cube.GenerateMesh(maxh=0.5)
     P = np.array([[p[0], p[1], p[2]] for p in m.Points()])
@@ -49,8 +50,9 @@ def _check_meshing_and_export():
 
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "cube.vol")
-        write_vol(path, r.vertices, r.tetrahedra, r.triangles,
-                  [("wall", list(range(len(r.triangles))))])
+        write_vol(path, ExportMesh(
+            nodes=r.vertices, tets=r.tetrahedra, surface_tri=r.triangles,
+            bc_groups=[BCGroup("wall", np.arange(len(r.triangles)))]))
         vol = ngsolve.Integrate(1, ngsolve.Mesh(path))
     if abs(vol - 1.0) > 1e-2:
         raise RuntimeError(f"exported volume {vol}, expected 1")

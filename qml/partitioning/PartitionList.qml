@@ -51,10 +51,14 @@ Item {
             spacing: 2
 
             delegate: Rectangle {
+                id: delegateRoot
                 required property var modelData
                 required property int index
                 width: ListView.view.width
-                height: 40
+                // Grow with contents so the ToolButton (implicit ~48 with Material)
+                // doesn't force the row's RowLayout taller than the Rectangle and
+                // push the label/swatch off-center.
+                height: Math.max(40, rowLayout.implicitHeight + 8)
                 color: modelData.selected
                        ? Qt.rgba(Material.accent.r, Material.accent.g, Material.accent.b, 0.18)
                        : (index % 2 === 0 ? Qt.rgba(1, 1, 1, 0.03) : "transparent")
@@ -75,13 +79,16 @@ Item {
                 }
 
                 RowLayout {
+                    id: rowLayout
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
                     spacing: 8
 
                     Rectangle {
                         Layout.preferredWidth: 18
                         Layout.preferredHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
                         radius: 3
                         color: modelData.color
                         border.color: Qt.rgba(1, 1, 1, 0.25)
@@ -90,12 +97,14 @@ Item {
                     Label {
                         text: modelData.name
                         Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                     }
                     ToolButton {
                         text: "×"
                         implicitWidth: 32
+                        Layout.alignment: Qt.AlignVCenter
                         onClicked: PreProcCtrl.deletePartition(modelData.id)
                     }
                 }

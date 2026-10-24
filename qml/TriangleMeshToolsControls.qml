@@ -163,13 +163,8 @@ Item {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(1, 1, 1, 0.12) }
 
-                Label { text: "Mesher"; font.bold: true }
-                ComboBox {
-                    Layout.fillWidth: true
-                    model: MeshingCtrl.getMeshers()
-                    currentIndex: 0
-                    onCurrentTextChanged: meshingTab.currentMesher = currentText
-                }
+                // Mesher picker hidden while fTetWild is the only backend;
+                // reinstate once a second mesher ships.
 
                 Repeater {
                     model: meshingTab.schema

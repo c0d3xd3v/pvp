@@ -10,7 +10,20 @@ from geometry.MeshRole import MeshRole
 from geometry.AbstractMeshData import AbstractGeometryData
 from geometry.InMemoryMeshData import InMemoryMeshData
 from fileio.NetgenVolWriter import write_vol
+from fileio.MshWriter import write_msh_v2, write_msh_v4
+from fileio.InpWriter import write_inp_calculix, write_inp_abaqus
 from fileio.export_model import ExportMesh, BCGroup
+
+
+# Supported export formats. Each entry carries the file extension, a writer
+# callable, and whether the writer honours the quadratic (Tet10) flag.
+_EXPORT_FORMATS = {
+    "vol":          {"ext": ".vol", "writer": write_vol,          "quadratic": False},
+    "msh2":         {"ext": ".msh", "writer": write_msh_v2,       "quadratic": True},
+    "msh4":         {"ext": ".msh", "writer": write_msh_v4,       "quadratic": True},
+    "inp_calculix": {"ext": ".inp", "writer": write_inp_calculix, "quadratic": True},
+    "inp_abaqus":   {"ext": ".inp", "writer": write_inp_abaqus,   "quadratic": True},
+}
 
 
 class PreProcCtrl(QObject):
@@ -32,9 +45,10 @@ class PreProcCtrl(QObject):
     def get_session(self) -> PreProcSession:
         return self.__session
 
+    @Slot(str, float)
     @Slot(str)
-    def loadSurface(self, file_path: str):
-        self.__fileio_ctrl.load_file(file_path)
+    def loadSurface(self, file_path: str, scale: float = 1.0):
+        self.__fileio_ctrl.load_file(file_path, scale=scale)
         data = self.__fileio_ctrl.get_geometry()
         # New surface = new geometry: volume/background from a previous
         # geometry are no longer valid.
@@ -251,25 +265,50 @@ class PreProcCtrl(QObject):
         return {"boundaries": len(named), "unassigned": unassigned,
                 "tets": len(data.get_tetrahedra())}
 
+    @Slot(result='QVariantList')
+    def getExportFormats(self) -> list:
+        """List exposed in the export dialog; QML drives the picker from it."""
+        return [
+            {"key": "vol",          "label": "Netgen volume mesh (.vol)",
+             "ext": ".vol", "quadratic": False},
+            {"key": "msh2",         "label": "Gmsh mesh v2 ASCII (.msh)",
+             "ext": ".msh", "quadratic": True},
+            {"key": "msh4",         "label": "Gmsh mesh v4 ASCII (.msh)",
+             "ext": ".msh", "quadratic": True},
+            {"key": "inp_calculix", "label": "CalculiX (.inp)",
+             "ext": ".inp", "quadratic": True},
+            {"key": "inp_abaqus",   "label": "Abaqus (.inp)",
+             "ext": ".inp", "quadratic": True},
+        ]
+
     @Slot(str, result=str)
-    def exportVolume(self, file_path: str) -> str:
-        """Write the volume mesh incl. boundary-condition labels as Netgen .vol.
-        Returns "" on success, otherwise an error message for the UI."""
+    @Slot(str, str, bool, result=str)
+    def exportVolume(self, file_path: str, format_key: str = "vol",
+                     quadratic: bool = False) -> str:
+        """Write the volume mesh incl. boundary-condition labels in the chosen
+        format. Returns "" on success, otherwise an error message for the UI."""
+        fmt = _EXPORT_FORMATS.get(format_key)
+        if fmt is None:
+            return f"Unknown export format: {format_key!r}"
+
         # QML passes a QUrl-like string (e.g. "file:///...") from the FileDialog
         if file_path.startswith('file:'):
             file_path = QUrl(file_path).toLocalFile()
-        if not file_path.endswith('.vol'):
-            file_path += '.vol'
+        if not file_path.endswith(fmt["ext"]):
+            file_path += fmt["ext"]
         if not self.canExportVolume():
             return "No volume mesh to export."
 
         try:
             mesh = self.__build_export_mesh()
-            write_vol(file_path, mesh)
+            if fmt["quadratic"]:
+                fmt["writer"](file_path, mesh, quadratic=bool(quadratic))
+            else:
+                fmt["writer"](file_path, mesh)
         except Exception as e:
             print(f"exportVolume failed: {e}")
             return str(e)
-        print(f"Exported {file_path}: "
+        print(f"Exported {file_path} ({format_key}, quadratic={quadratic}): "
               + ", ".join(f"{g.name} ({len(g.triangles)})" for g in mesh.bc_groups))
         return ""
 

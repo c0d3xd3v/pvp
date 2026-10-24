@@ -71,8 +71,12 @@ class MainCtrl(QObject):
             path, self.__startup_file = self.__startup_file, None
             self.loadMesh(path)
 
+    @Slot(str, float)
     @Slot(str)
-    def loadMesh(self, file_path: str):
+    def loadMesh(self, file_path: str, surface_scale: float = 1.0):
+        """`surface_scale` applies to STL/OBJ only; the QML side picks it
+        from the units dialog so the vertices land in mm regardless of the
+        original file's convention."""
         file_path = QUrl(file_path).toLocalFile()
         ext = Path(file_path).suffix.lower()
 
@@ -85,7 +89,7 @@ class MainCtrl(QObject):
             self.meshLoaded.emit("results")
         elif ext in _SURFACE_EXTS:
             self.__exit_result_mode()
-            self.__prepoc_ctrl.loadSurface(file_path)
+            self.__prepoc_ctrl.loadSurface(file_path, surface_scale)
             self.meshLoaded.emit("geometry")
         elif ext in _VOLUME_EXTS:
             self.__exit_result_mode()

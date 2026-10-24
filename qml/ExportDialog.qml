@@ -18,12 +18,11 @@ Item {
         title: "Export"
         modal: true
         anchors.centerIn: Overlay.overlay
-        width: Math.min(360, Overlay.overlay ? Overlay.overlay.width - 40 : 360)
+        width: Math.min(400, Overlay.overlay ? Overlay.overlay.width - 40 : 400)
 
-        // More formats/settings go here later; each entry: label, file filter, suffix
-        property var formats: [
-            { label: "Netgen volume mesh (.vol)", filter: "Netgen volume mesh (*.vol)", suffix: "vol" }
-        ]
+        property var formats: PreProcCtrl.getExportFormats()
+        property int formatIndex: 0
+        readonly property var currentFormat: formats[formatIndex]
 
         footer: DialogButtonBox {
             Button {
@@ -49,7 +48,21 @@ Item {
                 Layout.fillWidth: true
                 model: exportDialog.formats
                 textRole: "label"
+                currentIndex: exportDialog.formatIndex
+                onCurrentIndexChanged: exportDialog.formatIndex = currentIndex
             }
+
+            CheckBox {
+                id: quadraticBox
+                text: "Quadratic elements (Tet10)"
+                enabled: exportDialog.currentFormat ? exportDialog.currentFormat.quadratic : false
+                checked: false
+                ToolTip.text: enabled
+                              ? "Emit second-order tetrahedra with straight midside nodes."
+                              : "Not supported by the selected format."
+                ToolTip.visible: hovered
+            }
+
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -69,10 +82,19 @@ Item {
         id: saveDialog
         title: "Export"
         fileMode: FileDialog.SaveFile
-        nameFilters: [exportDialog.formats[formatBox.currentIndex].filter]
-        defaultSuffix: exportDialog.formats[formatBox.currentIndex].suffix
+        nameFilters: {
+            if (!exportDialog.currentFormat) return ["All files (*)"]
+            var ext = exportDialog.currentFormat.ext.replace(".", "")
+            return [exportDialog.currentFormat.label + " (*" + exportDialog.currentFormat.ext + ")"]
+        }
+        defaultSuffix: exportDialog.currentFormat
+                       ? exportDialog.currentFormat.ext.replace(".", "")
+                       : ""
         onAccepted: {
-            var err = PreProcCtrl.exportVolume(saveDialog.selectedFile.toString())
+            var fmt = exportDialog.currentFormat
+            var quadratic = quadraticBox.enabled && quadraticBox.checked
+            var err = PreProcCtrl.exportVolume(saveDialog.selectedFile.toString(),
+                                               fmt.key, quadratic)
             if (err !== "") {
                 errorLabel.text = err
                 errorDialog.open()

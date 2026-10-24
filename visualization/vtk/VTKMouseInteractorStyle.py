@@ -4,6 +4,7 @@ from PySide6 import QtCore
 
 class VTKMouseInteractorStyleQtSignals(QtCore.QObject):
     cell_picked = QtCore.Signal(int)
+    cell_right_picked = QtCore.Signal(int)
     point_picked = QtCore.Signal(int)
 
 
@@ -16,6 +17,7 @@ class VTKMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         self.clip_mode = False  # suppresses cell picking when clip widget is active
         self.qt_signals = VTKMouseInteractorStyleQtSignals()
         self.AddObserver('LeftButtonPressEvent', self.left_button_press_event)
+        self.AddObserver('RightButtonPressEvent', self.right_button_press_event)
 
     def set_pixel_ratio(self, ratio):
         self.__pixel_ratio = ratio
@@ -51,6 +53,30 @@ class VTKMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
                             original_cell = ids.GetValue(picked_cell)
                     self.qt_signals.cell_picked.emit(original_cell)
         self.OnLeftButtonDown()
+
+    def right_button_press_event(self, obj, event):
+        # Right-click = "unassign faces". We pick a cell and emit a dedicated
+        # signal; we deliberately do NOT forward to OnRightButtonDown so the
+        # trackball's dolly-on-drag doesn't fight the deselect. Zoom still
+        # works via the mouse wheel.
+        if self.clip_mode:
+            return
+        pos = self.GetInteractor().GetEventPosition()
+        renderer = self.GetDefaultRenderer()
+        cell_picker = vtk.vtkCellPicker()
+        cell_picker.SetTolerance(0.01)
+        if cell_picker.Pick(pos[0], pos[1], 0, renderer):
+            picked_actor = cell_picker.GetActor()
+            picked_cell  = cell_picker.GetCellId()
+            if picked_actor and picked_actor == self.selectableActor and picked_cell != -1:
+                mapper   = picked_actor.GetMapper()
+                polydata = mapper.GetInput()
+                original_cell = picked_cell
+                if polydata:
+                    ids = polydata.GetCellData().GetArray("OriginalIds")
+                    if ids:
+                        original_cell = ids.GetValue(picked_cell)
+                self.qt_signals.cell_right_picked.emit(original_cell)
 
     def center_on_picked_point(self):
         """Move the camera so the surface point under the cursor becomes the focal

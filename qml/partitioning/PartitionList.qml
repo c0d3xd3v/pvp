@@ -26,6 +26,36 @@ Item {
         anchors.leftMargin: 5
         anchors.rightMargin: 5
 
+        // Pick-angle threshold: BFS from the clicked face stops at edges
+        // where the dihedral angle exceeds this value (degrees). Label floats
+        // above the control, like a focused Material TextField's placeholder.
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 0
+            Label {
+                text: "pick angle (°)"
+                font.pixelSize: 10
+                opacity: 0.65
+                Layout.leftMargin: 4
+                Layout.alignment: Qt.AlignLeft
+                ToolTip.text: "Max angle between neighbouring triangle normals "
+                              + "when flood-filling a selection (degrees)."
+                ToolTip.visible: angleHover.hovered
+                ToolTip.delay: 400
+                HoverHandler { id: angleHover }
+            }
+            SpinBox {
+                id: angleSpin
+                from: 0
+                to: 180
+                stepSize: 1
+                editable: true
+                value: Math.round(SelectionCtrl.getNormalCompareAngle())
+                Layout.fillWidth: true
+                onValueModified: SelectionCtrl.set_normal_compare_angle(value)
+            }
+        }
+
         RowLayout {
             Layout.fillWidth: true
             TextField {

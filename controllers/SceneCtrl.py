@@ -43,6 +43,7 @@ class SceneCtrl(QObject):
         self.__volume_ug = None
         self.__volume_clip_filter = None
         self.__clip = ClipPlane()
+        self.__wireframe = False
         self.partitions = BoundaryPartitions(request_render=self.__render)
 
     def set_vtk_item(self, vtkitem):
@@ -103,9 +104,16 @@ class SceneCtrl(QObject):
             self.partitions.attach(self.__actor)
             if self.__clip.enabled:
                 self.__actor.mapper.AddClippingPlane(self.__clip.plane)
+            if self.__wireframe:
+                self.__actor.enableEdges()
             self.__renderer().AddActor(self.__actor)
             self.__renderer().ResetCamera()
             self.__clip.reposition()
+            # Re-assert the widget's EnabledOn state: swapping the scene's
+            # actors can leave the implicit-plane widget invisible even though
+            # the clip plane itself is still bound to the new mapper.
+            if self.__clip.enabled:
+                self.__clip.set_enabled(True)
             self.__vtkitem.setSeletableActor(self.__actor)
             self.__render()
 
@@ -161,14 +169,26 @@ class SceneCtrl(QObject):
     def add_background_geometry(self, polydata: vtk.vtkPolyData):
         self.__add_role_actor("background", polydata, color=(0.2, 0.9, 0.3), opacity=0.4, wireframe=True)
 
+    def reset_view_toggles(self):
+        """Fresh file = fresh view: wireframe off, clipping off. QML recreates
+        the rendering-controls Switches on every file load, so we have to
+        match their default state here or the two drift apart."""
+        self.__wireframe = False
+        if self.__clip.enabled:
+            self.__clip.set_enabled(False)
+
     def interactive_select(self, face_ids, partition_id):
         self.partitions.assign_faces(face_ids, partition_id)
 
+    def interactive_deselect(self, face_ids):
+        self.partitions.clear_faces(face_ids)
+
     @Slot(bool)
     def toogleWireframe(self, toogle):
+        self.__wireframe = bool(toogle)
         if self.__actor is None:
             return
-        if toogle:
+        if self.__wireframe:
             self.__actor.enableEdges()
         else:
             self.__actor.disableEdges()
@@ -188,6 +208,8 @@ class SceneCtrl(QObject):
             self.__renderer().AddActor(self.__result_actor)
             self.__renderer().ResetCamera()
             self.__clip.reposition()
+            if self.__clip.enabled:
+                self.__clip.set_enabled(True)
             self.__render()
 
     def add_result_geometry(self, data):

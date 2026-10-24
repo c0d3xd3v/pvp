@@ -60,6 +60,7 @@ class PreProcCtrl(QObject):
             name=Path(file_path).name
         ))
         if self.__scene_ctrl:
+            self.__scene_ctrl.reset_view_toggles()
             polydata = self.__scene_ctrl.add_surface_geometry(
                 data.get_vertices(), data.get_triangles()
             )
@@ -83,6 +84,7 @@ class PreProcCtrl(QObject):
         self.__session.set(PreProcMesh(role=MeshRole.SURFACE, data=data, name=name))
 
         if self.__scene_ctrl:
+            self.__scene_ctrl.reset_view_toggles()
             # Build surface (also resets partitions, sets up FaceSelectionActor)
             polydata = self.__scene_ctrl.add_surface_geometry(
                 data.get_vertices(), data.get_triangles()

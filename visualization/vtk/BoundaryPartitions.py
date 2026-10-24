@@ -85,6 +85,14 @@ class BoundaryPartitions:
         self.__actor.updatePartitions(face_ids, pid)
         self.__request_render()
 
+    def clear_faces(self, face_ids):
+        """Reset the given cells back to unassigned, regardless of which
+        partition they currently belong to."""
+        if self.__actor is None or len(face_ids) == 0:
+            return
+        self.__actor.updatePartitions(face_ids, UNASSIGNED)
+        self.__request_render()
+
     def ids_per_cell(self):
         """Partition id per surface triangle (copy), or None without a surface."""
         if self.__actor is None or self.__actor.full_polydata is None:

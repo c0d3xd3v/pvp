@@ -50,6 +50,7 @@ class MeshingCtrl(QObject):
         self.__scene_ctrl = None
         self.__thread: QThread | None = None
         self.__worker: _MeshingWorker | None = None
+        self.__bc_snapshot: dict | None = None
 
     def set_controllers(self, preproc_ctrl, scene_ctrl):
         self.__preproc_ctrl = preproc_ctrl
@@ -122,6 +123,10 @@ class MeshingCtrl(QObject):
         # When the C++ QThread object is destroyed, forget our reference
         self.__thread.destroyed.connect(self.__on_thread_destroyed)
 
+        # Snapshot boundary assignments on the current surface so the new
+        # tet-mesher boundary can inherit them in __on_worker_finished.
+        self.__bc_snapshot = self.__preproc_ctrl.snapshot_boundary_assignments()
+
         self.meshingStarted.emit()
         self.__thread.start()
         return True
@@ -137,7 +142,9 @@ class MeshingCtrl(QObject):
                 result.triangles,
                 result.tetrahedra,
                 name="meshed",
+                bc_transfer=self.__bc_snapshot,
             )
+        self.__bc_snapshot = None
         self.meshingFinished.emit(success)
         # No explicit cleanup — Qt handles it via the deleteLater chain above.
 

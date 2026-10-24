@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import numpy as np
+import vtk
+from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from PySide6.QtCore import Slot, Signal, QObject, QUrl
 
@@ -144,12 +146,39 @@ class PreProcCtrl(QObject):
             self.__scene_ctrl.add_background_geometry(polydata)
         self.sessionChanged.emit()
 
-    def replace_project_with_mesh(self, vertices, triangles, tetrahedra, name: str):
+    def snapshot_boundary_assignments(self) -> dict | None:
+        """Capture the current surface + partition state so a subsequent call
+        to replace_project_with_mesh can port the boundary assignments onto
+        the new tet-mesher boundary. Returns None if there is nothing to
+        transfer (no surface, no named partitions, or every triangle
+        unassigned)."""
+        if self.__scene_ctrl is None:
+            return None
+        surface = self.__session.surface
+        if surface is None or surface.data is None:
+            return None
+        part_ids = self.__scene_ctrl.partitions.ids_per_cell()
+        if part_ids is None or not np.any(part_ids):
+            return None
+        names = {p.id: p.name for p in self.__scene_ctrl.partitions.all()}
+        if not names:
+            return None
+        return {
+            "vertices": np.asarray(surface.data.get_vertices(), dtype=np.float64),
+            "triangles": np.asarray(surface.data.get_triangles(), dtype=np.int64),
+            "ids_per_cell": np.asarray(part_ids, dtype=np.int32),
+            "names": names,
+        }
+
+    def replace_project_with_mesh(self, vertices, triangles, tetrahedra,
+                                  name: str, bc_transfer: dict | None = None):
         """Called by MeshingCtrl after a mesher finishes. Takes the mesher's
         output arrays and treats them as a complete new project — surface is
-        the tet boundary, volume is the tet set. Partitions get reset (the
-        old partitions were on a different surface topology).
-        """
+        the tet boundary, volume is the tet set. When bc_transfer is given,
+        boundary assignments from before the meshing step are projected onto
+        the new surface via nearest-cell lookup against the pre-meshing
+        geometry (fTetWild emits a surface close to the input, so centroids
+        map reliably back to their original triangles)."""
         V = np.asarray(vertices).tolist()
         tris = np.asarray(triangles).tolist()
         tets = np.asarray(tetrahedra).tolist()
@@ -168,8 +197,60 @@ class PreProcCtrl(QObject):
                 self.__selection_ctrl.load_geometry(polydata)
             # Add volume
             self.__scene_ctrl.add_volume_unstructured_mesh(vertices, tetrahedra)
+            if bc_transfer is not None:
+                self.__transfer_boundaries(bc_transfer, vertices, triangles)
 
         self.sessionChanged.emit()
+
+    def __transfer_boundaries(self, snap: dict, new_vertices, new_triangles):
+        """Rebuild partitions on the new surface by nearest-cell projection
+        onto the pre-meshing surface."""
+        old_V = snap["vertices"]
+        old_F = snap["triangles"]
+        old_part_ids = snap["ids_per_cell"]
+        old_names = snap["names"]
+
+        # vtkPolyData for the old surface (cell locator target)
+        pts = vtk.vtkPoints()
+        pts.SetData(numpy_to_vtk(old_V, deep=True))
+        conn = np.column_stack(
+            (np.full(len(old_F), 3, dtype=np.int64), old_F)
+        ).ravel()
+        cells = vtk.vtkCellArray()
+        cells.SetCells(len(old_F), numpy_to_vtk(conn, deep=True,
+                                                array_type=vtk.VTK_ID_TYPE))
+        old_pd = vtk.vtkPolyData()
+        old_pd.SetPoints(pts)
+        old_pd.SetPolys(cells)
+
+        locator = vtk.vtkCellLocator()
+        locator.SetDataSet(old_pd)
+        locator.BuildLocator()
+
+        new_V = np.asarray(new_vertices, dtype=np.float64)
+        new_F = np.asarray(new_triangles, dtype=np.int64)
+        centroids = new_V[new_F].mean(axis=1)
+
+        closest = [0.0, 0.0, 0.0]
+        cell_id = vtk.reference(0)
+        sub_id = vtk.reference(0)
+        dist2 = vtk.reference(0.0)
+        new_part_ids = np.zeros(len(new_F), dtype=np.int32)
+        for i, c in enumerate(centroids):
+            locator.FindClosestPoint(c.tolist(), closest, cell_id, sub_id, dist2)
+            cid = int(cell_id)
+            if 0 <= cid < len(old_part_ids):
+                new_part_ids[i] = int(old_part_ids[cid])
+
+        # Recreate partitions by name (in original id order so colours stay stable)
+        id_map: dict[int, int] = {}
+        for old_pid in sorted(old_names.keys()):
+            id_map[old_pid] = self.__scene_ctrl.partitions.add(old_names[old_pid])
+
+        for old_pid, new_pid in id_map.items():
+            indices = np.where(new_part_ids == old_pid)[0].tolist()
+            if indices:
+                self.__scene_ctrl.partitions.assign_faces(indices, new_pid)
 
     @Slot(bool)
     def setPickingEnabled(self, enabled: bool):

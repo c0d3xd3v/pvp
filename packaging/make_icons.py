@@ -1,4 +1,4 @@
-"""Regenerate the raster icons from resources/icons/pvp.svg:
+"""Regenerate the raster icons from src/pvp/resources/icons/pvp.svg:
 pvp.png (256 px, Linux / docs) and pvp.ico (16-256 px, Windows executable).
 
     python3 packaging/make_icons.py
@@ -11,7 +11,7 @@ from PySide6.QtCore import QBuffer, QIODevice, QRectF, Qt
 from PySide6.QtGui import QGuiApplication, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
-ICONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resources", "icons")
+ICONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "pvp", "resources", "icons")
 SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 

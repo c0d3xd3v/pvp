@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
 
 _PROBE = """
 import json, sys, time
@@ -20,7 +20,7 @@ print(json.dumps({"loaded": [m for m in heavy if m in sys.modules], "seconds": d
 
 
 def test_startup_does_not_import_heavy_packages():
-    out = subprocess.run([sys.executable, "-c", _PROBE], cwd=ROOT, check=True,
+    out = subprocess.run([sys.executable, "-c", _PROBE], cwd=SRC, check=True,
                          capture_output=True, text=True).stdout
     result = json.loads(out.strip().splitlines()[-1])
     assert result["loaded"] == []

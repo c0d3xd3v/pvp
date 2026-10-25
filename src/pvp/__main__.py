@@ -28,15 +28,16 @@ QQuickWindow.setGraphicsApi(QSGRendererInterface.OpenGLRhi)
 
 
 def _compile_resources():
-    """Regenerate resources/resources.py with pyside6-rcc when it is missing or
+    """Regenerate resources_rc.py with pyside6-rcc when it is missing or
     older than the .qrc or any file it lists (QML, icons, ...). The generated
     file is not tracked in git."""
     import re
     import subprocess
     from pathlib import Path
 
-    res_dir = Path(__file__).resolve().parent / "resources"
-    qrc, out = res_dir / "resources.qrc", res_dir / "resources.py"
+    pkg_dir = Path(__file__).resolve().parent
+    res_dir = pkg_dir / "resources"
+    qrc, out = res_dir / "resources.qrc", pkg_dir / "resources_rc.py"
     sources = [qrc] + [res_dir / f for f in re.findall(r"<file[^>]*>([^<]+)</file>", qrc.read_text())]
     newest = max(s.stat().st_mtime for s in sources if s.exists())
     if not out.exists() or out.stat().st_mtime < newest:
@@ -44,13 +45,13 @@ def _compile_resources():
         subprocess.check_call(["pyside6-rcc", str(qrc), "-o", str(out)])
 
 
-# In a packaged build (PyInstaller) resources.py is bundled and pyside6-rcc absent.
+# In a packaged build (PyInstaller) resources_rc.py is bundled and pyside6-rcc absent.
 if not getattr(sys, "frozen", False):
     _compile_resources()
 
 if "--smoke-test" in sys.argv:
     from PySide6.QtQuickControls2 import QQuickStyle as _style
-    import smoke_test
+    from pvp import smoke_test
     _style.setStyle("Material")
     sys.exit(smoke_test.run())
 
@@ -62,7 +63,7 @@ if sys.platform.startswith("linux"):
 
 from pvp.controllers.MainCtrl         import MainCtrl
 from pvp.visualization.qtquick.VTKItem import VTKItem
-from resources                     import resources
+from pvp                           import resources_rc  # noqa: F401  qrc:/ data
 
 
 if __name__ == "__main__":

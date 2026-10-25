@@ -3,4 +3,4 @@ set -e
 
 cd "$(dirname "$0")"
 
-python3 pvp.py "$@"
+PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m pvp "$@"

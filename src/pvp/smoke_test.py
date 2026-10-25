@@ -44,7 +44,7 @@ def _check_qml():
     from PySide6.QtCore import QUrl
     from PySide6.QtQml import QQmlEngine, QQmlComponent
     import pvp.visualization.qtquick.VTKItem  # noqa: F401  registers QmlVtk
-    from resources import resources       # noqa: F401  qrc:/ data
+    from pvp import resources_rc          # noqa: F401  qrc:/ data
 
     engine = QQmlEngine()
     engine.addImportPath(':/qml/')

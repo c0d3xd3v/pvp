@@ -14,8 +14,8 @@ STRIP = False
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 EXT_DIR = os.environ.get("PVP_EXT_DIR")
 
-pathex = [ROOT] + ([EXT_DIR] if EXT_DIR else [])
-datas, binaries, hiddenimports = [], [], ["smoke_test", "resources.resources"]
+pathex = [os.path.join(ROOT, "src")] + ([EXT_DIR] if EXT_DIR else [])
+datas, binaries, hiddenimports = [], [], ["pvp.smoke_test", "pvp.resources_rc"]
 
 # Netgen/NGSolve ship shared libraries and data next to their Python packages.
 # ngsolve_openblas (PyPI builds of ngsolve) is imported dynamically and preloads
@@ -89,11 +89,11 @@ excludes = [
     "PySide6.QtSensors", "PySide6.QtBluetooth", "PySide6.QtNfc", "PySide6.QtSerialPort",
     "PySide6.QtSerialBus", "PySide6.QtSql", "PySide6.QtTest", "PySide6.QtDesigner",
     "PySide6.QtHelp", "PySide6.QtRemoteObjects", "PySide6.QtScxml", "PySide6.QtTextToSpeech",
-    "PySide6.QtHttpServer", "PySide6.QtQuick3D",
+    "PySide6.QtHttpServer", "PySide6.QtQuick3D", "PySide6.QtWidgets",
 ]
 
 a = Analysis(
-    [os.path.join(ROOT, "pvp.py")],
+    [os.path.join(ROOT, "src", "pvp", "__main__.py")],
     pathex=pathex,
     binaries=binaries,
     datas=datas,
@@ -115,7 +115,7 @@ exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
     name="pvp",
-    icon=os.path.join(ROOT, "resources", "icons", "pvp.ico"),   # Windows .exe icon
+    icon=os.path.join(ROOT, "src", "pvp", "resources", "icons", "pvp.ico"),   # Windows .exe icon
     console=True,          # keeps log output visible; --smoke-test needs stdout
     strip=STRIP,
     upx=False,

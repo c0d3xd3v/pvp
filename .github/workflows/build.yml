@@ -105,7 +105,7 @@ jobs:
       - name: Package (PyInstaller)
         shell: bash
         run: |
-          pyside6-rcc resources/resources.qrc -o resources/resources.py
+          pyside6-rcc src/pvp/resources/resources.qrc -o src/pvp/resources_rc.py
           PVP_EXT_DIR="$EXT_DIR" python -m PyInstaller packaging/pvp.spec --noconfirm
 
       - name: Smoke test of the packaged app
@@ -121,7 +121,7 @@ jobs:
       - name: Archive
         shell: bash
         run: |
-          cp LICENSE README.md resources/icons/pvp.png dist/pvp/
+          cp LICENSE README.md src/pvp/resources/icons/pvp.png dist/pvp/
           cd dist
           if [ "$RUNNER_OS" = "Windows" ]; then 7z a -tzip ../${{ matrix.artifact }}.zip pvp > /dev/null
           else tar czf ../${{ matrix.artifact }}.tar.gz pvp; fi

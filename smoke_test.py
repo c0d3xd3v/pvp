@@ -83,8 +83,8 @@ def _check_meshing_and_export():
 
 def run() -> int:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    app = QApplication(sys.argv[:1])   # noqa: F841  needed for QML engine
+    from PySide6.QtGui import QGuiApplication
+    app = QGuiApplication(sys.argv[:1])   # noqa: F841  needed for QML engine
     try:
         _check_vtk()
         _check_qml()

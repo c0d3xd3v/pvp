@@ -4,7 +4,6 @@ import platform
 
 from visualization.vtk import vtklib as vtk
 
-from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QEvent, QPointF
 from PySide6.QtGui import QCursor, QMouseEvent, QWheelEvent
 from PySide6.QtQuick import QQuickFramebufferObject

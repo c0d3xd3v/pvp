@@ -1,5 +1,4 @@
 import numpy as np
-import netgen.meshing as nm
 
 from fileio.export_model import ExportMesh
 
@@ -42,6 +41,8 @@ def write_vol(path: str, mesh: ExportMesh):
     P = mesh.nodes
     T = _orient_tets(P, mesh.tets)
     F = _orient_boundary(P, T, mesh.surface_tri)
+
+    import netgen.meshing as nm   # ~0.15 s, only needed for .vol export
 
     out = nm.Mesh(dim=3)
     # nm.Pnt: Point3d was removed in newer netgen releases (e.g. 6.2.2608)

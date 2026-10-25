@@ -13,7 +13,7 @@ t = time.perf_counter()
 from controllers.MainCtrl import MainCtrl
 from visualization.qtquick.VTKItem import VTKItem
 dt = time.perf_counter() - t
-heavy = ["igl", "ngsolve", "meshio", "scipy", "h5py",
+heavy = ["igl", "netgen", "ngsolve", "meshio", "scipy", "h5py",
          "vtkmodules.all", "vtkmodules.vtkFiltersHyperTree"]
 print(json.dumps({"loaded": [m for m in heavy if m in sys.modules], "seconds": dt}))
 """

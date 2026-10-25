@@ -2,7 +2,6 @@
 import threading
 from collections import deque
 
-from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, Signal, QTimer, QEvent, QPointF, Slot, QPoint, QCoreApplication, QObject
 from PySide6.QtGui import QSurfaceFormat, QMouseEvent, QWheelEvent
 from PySide6.QtQuick import QQuickFramebufferObject
@@ -376,5 +375,4 @@ def defaultFormat(stereo_capable):
 QSurfaceFormat.setDefaultFormat(defaultFormat(False))
 qmlRegisterType(VTKItem, "QmlVtk", 1, 0, "VTKItem")
 QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
-QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
 

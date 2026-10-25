@@ -10,6 +10,8 @@ from PySide6.QtGui import QCursor, QMouseEvent, QWheelEvent
 from PySide6.QtQuick import QQuickFramebufferObject
 from PySide6.QtOpenGL import QOpenGLFramebufferObject, QOpenGLFramebufferObjectFormat
 
+from visualization.vtk.scene_lock import SCENE_LOCK
+
 GL_RGBA = 0x1908   # OpenGL enum; avoids depending on PyOpenGL for one constant
 
 # Try to import VTKMouseInteractorStyle, fall back to the standard style
@@ -105,7 +107,10 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
         """Main render function"""
         if not self.vtkitem:
             return
+        with SCENE_LOCK:
+            self.__render_locked()
 
+    def __render_locked(self):
         # Initialize on first render
         if not self.isinit:
             self._initialize_vtk_context()

@@ -2,6 +2,7 @@ import numpy as np
 from vtkmodules.util.numpy_support import vtk_to_numpy
 
 from geometry.Partition import Partition
+from visualization.vtk.scene_lock import scene_locked
 
 
 UNASSIGNED = 0
@@ -34,6 +35,7 @@ class BoundaryPartitions:
         self.__set_hover_enabled = set_hover_enabled
         self.on_changed = None   # called after any change of names/colors/selection
 
+    @scene_locked
     def attach(self, actor):
         """Start over on a new surface actor (all faces unassigned)."""
         self.__actor = actor
@@ -44,10 +46,12 @@ class BoundaryPartitions:
         self.__set_hover_enabled(False)
         self.__notify()
 
+    @scene_locked
     def detach(self):
         self.__actor = None
         self.__set_hover_enabled(False)
 
+    @scene_locked
     def add(self, name: str) -> int:
         pid = self.__next_id
         self.__next_id += 1
@@ -57,6 +61,7 @@ class BoundaryPartitions:
         self.__notify()
         return pid
 
+    @scene_locked
     def delete(self, pid: int):
         if pid not in self.__partitions:
             return
@@ -74,6 +79,7 @@ class BoundaryPartitions:
         self.__notify()
         self.__request_render()
 
+    @scene_locked
     def set_current(self, pid: int | None):
         self.__current_id = pid if pid in self.__partitions else None
         self.__set_hover_enabled(self.__current_id is not None)
@@ -90,6 +96,7 @@ class BoundaryPartitions:
     def all(self) -> list[Partition]:
         return sorted(self.__partitions.values(), key=lambda p: p.id)
 
+    @scene_locked
     def assign_faces(self, face_ids, pid: int):
         """Assign cells (indices into the surface triangles) to a partition."""
         if self.__actor is None or pid not in self.__partitions or len(face_ids) == 0:
@@ -97,6 +104,7 @@ class BoundaryPartitions:
         self.__actor.updatePartitions(face_ids, pid)
         self.__request_render()
 
+    @scene_locked
     def clear_faces(self, face_ids):
         """Reset the given cells back to unassigned, regardless of which
         partition they currently belong to."""
@@ -105,6 +113,7 @@ class BoundaryPartitions:
         self.__actor.updatePartitions(face_ids, UNASSIGNED)
         self.__request_render()
 
+    @scene_locked
     def preview_faces(self, face_ids):
         """Hover preview: highlight the region a click would paint, tinted
         with the current partition's color."""
@@ -114,6 +123,7 @@ class BoundaryPartitions:
         self.__actor.set_preview(face_ids, self._preview_color())
         self.__request_render()
 
+    @scene_locked
     def clear_preview(self):
         if self.__actor is None:
             return
@@ -129,6 +139,7 @@ class BoundaryPartitions:
                 g + (1.0 - g) * mix,
                 b + (1.0 - b) * mix)
 
+    @scene_locked
     def ids_per_cell(self):
         """Partition id per surface triangle (copy), or None without a surface."""
         if self.__actor is None or self.__actor.full_polydata is None:

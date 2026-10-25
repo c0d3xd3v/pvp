@@ -10,6 +10,7 @@ from visualization.vtk.ResultActor import ResultActor
 from visualization.vtk.FaceSelectionActor import FaceSelectionActor
 from visualization.vtk.BoundaryPartitions import BoundaryPartitions
 from visualization.vtk.ClipPlane import ClipPlane
+from visualization.vtk.scene_lock import scene_locked
 
 
 def _triangle_polydata(vertices, triangles) -> vtk.vtkPolyData:
@@ -49,6 +50,7 @@ class SceneCtrl(QObject):
             set_hover_enabled=self.__set_hover_enabled,
         )
 
+    @scene_locked
     def set_vtk_item(self, vtkitem):
         self.__vtkitem = vtkitem
         self.__clip.attach(vtkitem)
@@ -96,12 +98,14 @@ class SceneCtrl(QObject):
         self.__renderer().AddActor(actor)
         self.__render()
 
+    @scene_locked
     def clear_result_actor(self):
         if self.__result_actor is not None:
             self.__renderer().RemoveActor(self.__result_actor)
             self.__result_actor = None
             self.__render()
 
+    @scene_locked
     def __prepare_rendering(self):
         if self.__vtkitem and self.__vtkitem.renderer and self.__polydata:
             self.__remove_all_actors()
@@ -127,15 +131,18 @@ class SceneCtrl(QObject):
             self.__vtkitem.setSeletableActor(self.__actor)
             self.__render()
 
+    @scene_locked
     def add_surface_geometry(self, vertices, triangles):
         self.__polydata = _triangle_polydata(vertices, triangles)
         self.__prepare_rendering()
         return self.__polydata
 
+    @scene_locked
     def add_volume_geometry(self, vertices, triangles):
         self.__add_role_actor("volume", _triangle_polydata(vertices, triangles),
                               color=(0.4, 0.6, 1.0), opacity=0.25, wireframe=True)
 
+    @scene_locked
     def add_volume_unstructured_mesh(self, vertices, tetrahedra):
         pts = vtk.vtkPoints()
         pts.SetData(numpy_to_vtk(np.array(vertices, dtype=np.float64), deep=True))
@@ -176,9 +183,11 @@ class SceneCtrl(QObject):
         self.__renderer().AddActor(actor)
         self.__render()
 
+    @scene_locked
     def add_background_geometry(self, polydata: vtk.vtkPolyData):
         self.__add_role_actor("background", polydata, color=(0.2, 0.9, 0.3), opacity=0.4, wireframe=True)
 
+    @scene_locked
     def reset_view_toggles(self):
         """Fresh file = fresh view: wireframe off, clipping off. QML recreates
         the rendering-controls Switches on every file load, so we have to
@@ -200,6 +209,7 @@ class SceneCtrl(QObject):
         self.partitions.clear_preview()
 
     @Slot(bool)
+    @scene_locked
     def toogleWireframe(self, toogle):
         self.__wireframe = bool(toogle)
         if self.__actor is None:
@@ -228,6 +238,7 @@ class SceneCtrl(QObject):
                 self.__clip.set_enabled(True)
             self.__render()
 
+    @scene_locked
     def add_result_geometry(self, data):
         self.__polydata = _triangle_polydata(data.get_vertices(), data.get_triangles())
         for name in data.get_field_names():
@@ -236,17 +247,20 @@ class SceneCtrl(QObject):
             self.__polydata.GetPointData().AddArray(vtk_array)
         self.__prepare_result_rendering()
 
+    @scene_locked
     def select_function(self, name):
         if self.__result_actor is not None:
             self.__result_actor.select_function(name)
             self.__render()
 
+    @scene_locked
     def set_animation_time(self, t):
         if self.__result_actor is not None:
             self.__result_actor.setAnimationTime(t)
             self.__result_actor.updateAnimation()
             self.__render()
 
+    @scene_locked
     def apply_vector_field_on_position(self, should_apply, scale):
         if self.__result_actor is not None:
             self.__result_actor.apply_vector_field_on_position(should_apply, scale)
@@ -278,6 +292,7 @@ class SceneCtrl(QObject):
             self.__result_actor.GetMapper().RemoveAllClippingPlanes()
 
     @Slot(bool)
+    @scene_locked
     def setClippingEnabled(self, enabled: bool):
         self.__clip.set_enabled(enabled)
         if enabled:
@@ -287,6 +302,7 @@ class SceneCtrl(QObject):
         self.__render()
 
     @Slot(str)
+    @scene_locked
     def setClipAxis(self, axis: str):
         if self.__clip.set_axis(axis):
             self.__render()

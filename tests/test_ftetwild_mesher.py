@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pyFloatTetwildWrapper")
-from meshing.FTetWildMesher import FTetWildMesher   # noqa: E402
+from pvp.meshing.FTetWildMesher import FTetWildMesher   # noqa: E402
 
 
 def test_parameters_reach_ftetwild(unit_cube):

@@ -2,9 +2,9 @@ import numpy as np
 import ngsolve as ngs
 import pytest
 
-from fileio.NetgenVolWriter import write_vol
-from fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
-from fileio.export_model import ExportMesh, BCGroup
+from pvp.fileio.NetgenVolWriter import write_vol
+from pvp.fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
+from pvp.fileio.export_model import ExportMesh, BCGroup
 
 
 def scrambled(T, F):

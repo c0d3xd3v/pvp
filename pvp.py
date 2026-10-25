@@ -60,8 +60,8 @@ if "--smoke-test" in sys.argv:
 if sys.platform.startswith("linux"):
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
-from controllers.MainCtrl         import MainCtrl
-from visualization.qtquick.VTKItem import VTKItem
+from pvp.controllers.MainCtrl         import MainCtrl
+from pvp.visualization.qtquick.VTKItem import VTKItem
 from resources                     import resources
 
 

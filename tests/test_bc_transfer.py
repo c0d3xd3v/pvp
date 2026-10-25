@@ -8,7 +8,7 @@ surface. Partitions are recreated with the original names.
 import numpy as np
 import pytest
 
-from controllers.PreProcCtrl import PreProcCtrl
+from pvp.controllers.PreProcCtrl import PreProcCtrl
 
 
 class _FakePartitions:

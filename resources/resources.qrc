@@ -25,7 +25,4 @@
     <qresource prefix="colormaps">
         <file alias="color_theme.xml">colormaps/color_theme.xml</file>
     </qresource>
-    <qresource prefix="textures">
-        <file alias="skybox.jpg">textures/skybox.jpg</file>
-    </qresource>
 </RCC>

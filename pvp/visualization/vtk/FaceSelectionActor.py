@@ -1,0 +1,175 @@
+from pvp.visualization.vtk import vtklib as vtk
+import numpy as np
+from vtkmodules.util.numpy_support import vtk_to_numpy, numpy_to_vtk
+
+class FaceSelectionActor(vtk.vtkActor):
+    def __init__(self):
+        super().__init__()
+        self.full_polydata = None
+        self.current_mode = "cell"          # 'cell' or 'partition'
+        self.lut = None
+        self._face_connectivity = None      # Mx3 numpy array of point ids
+
+        self.mapper = vtk.vtkOpenGLPolyDataMapper()
+        self.SetMapper(self.mapper)
+        self.GetProperty().SetInterpolationToFlat()
+        self.SetPickable(True)
+
+        # Hover-preview overlay: shares the surface's points, holds only the
+        # hovered triangles, pulled toward the camera against z-fighting.
+        self._preview_polydata = vtk.vtkPolyData()
+        self._preview_mapper = vtk.vtkOpenGLPolyDataMapper()
+        self._preview_mapper.SetInputData(self._preview_polydata)
+        self._preview_mapper.ScalarVisibilityOff()
+        self._preview_mapper.SetResolveCoincidentTopologyToPolygonOffset()
+        self._preview_mapper.SetRelativeCoincidentTopologyPolygonOffsetParameters(-2.0, -2.0)
+        self._preview_mapper.SetRelativeCoincidentTopologyLineOffsetParameters(-2.0, -2.0)
+        self.preview_actor = vtk.vtkActor()
+        self.preview_actor.SetMapper(self._preview_mapper)
+        self.preview_actor.SetPickable(False)
+        prop = self.preview_actor.GetProperty()
+        prop.SetInterpolationToFlat()
+        prop.LightingOff()
+        prop.SetColor(1.0, 1.0, 1.0)
+        prop.SetOpacity(0.45)
+        self.preview_actor.SetVisibility(False)
+
+    def setPolyData(self, polydata: vtk.vtkPolyData, partition_ids: np.ndarray = None):
+        # ---- Add OriginalIds (cell indices) ----
+        id_filter = vtk.vtkIdFilter()
+        id_filter.SetInputData(polydata)
+        id_filter.SetCellIds(True)
+        id_filter.SetPointIds(False)
+        id_filter.SetCellIdsArrayName("OriginalIds")
+        id_filter.Update()
+        self.full_polydata = id_filter.GetOutput()
+
+        polys = self.full_polydata.GetPolys()
+        if polys and polys.GetNumberOfCells() > 0:
+            cell_data = vtk_to_numpy(polys.GetData())
+            self._face_connectivity = cell_data.reshape(-1, 4)[:, 1:4]
+        else:
+            self._face_connectivity = None
+        self._preview_polydata.SetPoints(self.full_polydata.GetPoints())
+        self.clear_preview()
+
+        # ---- Add PartitionIds if provided ----
+        if partition_ids is not None:
+            self._add_partition_array(partition_ids)
+
+        # ---- Start with LUT that only knows unassigned (0=grey). SceneCtrl syncs it. ----
+        self.set_partition_colors({0: (0.7, 0.7, 0.7)})
+
+        # ---- Start with cell mode ----
+        self.setColorMode("partition")
+
+    def _add_partition_array(self, partition_ids: np.ndarray):
+        """Replace or add the PartitionIds array."""
+        # Remove old if exists
+        old = self.full_polydata.GetCellData().GetArray("PartitionIds")
+        if old:
+            self.full_polydata.GetCellData().RemoveArray("PartitionIds")
+        # Add new
+        vtk_ids = numpy_to_vtk(partition_ids, deep=True, array_type=vtk.VTK_INT)
+        vtk_ids.SetName("PartitionIds")
+        self.full_polydata.GetCellData().AddArray(vtk_ids)
+
+    def updatePartitions(self, face_ids, new_partition_id):
+        """Set the partition id of the cells face_ids (OriginalIds, i.e. surface
+        triangle indices) to new_partition_id."""
+        if self.full_polydata is None:
+            return
+
+        part_arr = self.full_polydata.GetCellData().GetArray("PartitionIds")
+        if part_arr is None:
+            raise RuntimeError("PartitionIds array not found. Call setPolyData with partition_ids first.")
+
+        part_np = vtk_to_numpy(part_arr).copy()
+        part_np[np.asarray(face_ids, dtype=np.int64)] = new_partition_id
+        self.set_partition_ids(part_np)
+
+    def set_partition_ids(self, partition_ids: np.ndarray):
+        """Replace the whole PartitionIds array (one id per surface triangle)."""
+        if self.full_polydata is None:
+            return
+        self._add_partition_array(np.asarray(partition_ids, dtype=np.int32))
+        if self.current_mode == "partition":
+            self.setColorMode("partition")   # triggers a redraw
+        else:
+            self.mapper.Modified()
+
+    def set_partition_colors(self, colors: dict):
+        """Rebuild LUT so lut[pid] == colors[pid]. Missing IDs get grey."""
+        num_entries = max(colors.keys()) + 1 if colors else 1
+        self.lut = vtk.vtkLookupTable()
+        self.lut.SetNumberOfTableValues(num_entries)
+        self.lut.SetRange(0, num_entries - 1)
+        self.lut.Build()
+        for i in range(num_entries):
+            r, g, b = colors.get(i, (0.7, 0.7, 0.7))
+            self.lut.SetTableValue(i, r, g, b, 1.0)
+        if self.current_mode == "partition" and self.full_polydata is not None:
+            self.mapper.SetLookupTable(self.lut)
+            self.mapper.SetScalarRange(0, num_entries - 1)
+            self.mapper.Modified()
+
+    def setColorMode(self, mode: str):
+        """mode = 'cell' (OriginalIds) or 'partition' (PartitionIds)"""
+        if mode not in ("cell", "partition"):
+            raise ValueError("Mode must be 'cell' or 'partition'")
+
+        self.current_mode = mode
+
+        # Choose which scalar array to use
+        if mode == "cell":
+            self.full_polydata.GetCellData().SetActiveScalars("OriginalIds")
+        else:  # partition
+            # If PartitionIds array does not exist, fall back to OriginalIds
+            if self.full_polydata.GetCellData().GetArray("PartitionIds") is None:
+                print("Warning: PartitionIds array missing, using OriginalIds instead.")
+                self.full_polydata.GetCellData().SetActiveScalars("OriginalIds")
+            else:
+                self.full_polydata.GetCellData().SetActiveScalars("PartitionIds")
+
+        self.mapper.SetInputData(self.full_polydata)
+        self.mapper.SetScalarModeToUseCellData()
+        self.mapper.SetLookupTable(self.lut)
+        # Range is always 0 .. num_entries-1 (LUT covers all)
+        self.mapper.SetScalarRange(0, self.lut.GetNumberOfTableValues() - 1)
+        self.mapper.Modified()
+
+    def set_preview(self, face_ids, color=(1.0, 1.0, 1.0)):
+        """Highlight the given triangles (OriginalIds) on top of the surface."""
+        if self._face_connectivity is None or len(face_ids) == 0:
+            self.clear_preview()
+            return
+        sub = self._face_connectivity[np.asarray(face_ids, dtype=np.int64)]
+        npts = np.full(len(sub), 3, dtype=np.int64)
+        conn = np.column_stack((npts, sub)).ravel()
+        cells = vtk.vtkCellArray()
+        cells.SetCells(len(sub), numpy_to_vtk(conn, deep=True, array_type=vtk.VTK_ID_TYPE))
+        self._preview_polydata.SetPolys(cells)
+        self._preview_polydata.Modified()
+        self.set_preview_color(color)
+        self.preview_actor.SetVisibility(True)
+
+    def set_preview_color(self, color):
+        self.preview_actor.GetProperty().SetColor(*color)
+
+    def clear_preview(self):
+        self.preview_actor.SetVisibility(False)
+        self._preview_polydata.SetPolys(vtk.vtkCellArray())
+        self._preview_polydata.Modified()
+
+    # Optional: edge rendering
+    def enableEdges(self):
+        p = self.GetProperty()
+        colors = vtk.vtkNamedColors()
+        edgeColor = colors.GetColor3d("Black")
+        p.SetEdgeColor(edgeColor)
+        self.mapper.SetResolveCoincidentTopologyToPolygonOffset()
+        self.mapper.SetResolveCoincidentTopologyLineOffsetParameters(100.0, 10.0)
+        p.EdgeVisibilityOn()
+
+    def disableEdges(self):
+        self.GetProperty().EdgeVisibilityOff()

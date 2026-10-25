@@ -10,7 +10,7 @@ ColumnLayout {
         text: qsTr("show triangle outline")
         display: AbstractButton.TextOnly
         Layout.fillWidth: true
-        onCheckedChanged: SceneCtrl.toogleWireframe(checked)
+        onCheckedChanged: SceneCtrl.toggleWireframe(checked)
     }
 
     Switch {

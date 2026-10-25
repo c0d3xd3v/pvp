@@ -10,8 +10,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PROBE = """
 import json, sys, time
 t = time.perf_counter()
-from controllers.MainCtrl import MainCtrl
-from visualization.qtquick.VTKItem import VTKItem
+from pvp.controllers.MainCtrl import MainCtrl
+from pvp.visualization.qtquick.VTKItem import VTKItem
 dt = time.perf_counter() - t
 heavy = ["igl", "netgen", "ngsolve", "meshio", "scipy", "h5py",
          "vtkmodules.all", "vtkmodules.vtkFiltersHyperTree"]

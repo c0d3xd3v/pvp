@@ -92,14 +92,14 @@ built.
 | Path | Contents |
 |---|---|
 | `pvp.py` | Entry point |
-| `controllers/` | Controllers exposed to QML (`MainCtrl` wires them; `PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
+| `pvp/controllers/` | Controllers exposed to QML (`MainCtrl` wires them; `PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
 | `qml/` | User interface (Qt Quick) |
-| `visualization/vtk/` | VTK actors, boundary partitions, clip plane, mouse interaction |
-| `visualization/qtquick/` | `VTKItem`: VTK rendering inside Qt Quick |
-| `meshing/` | Mesher interface (`TetMesher.py`) and fTetWild implementation |
-| `fileio/` | Readers and writers for the supported mesh formats |
-| `geometry/` | Mesh data interface/containers, pre-processing session, geometry helpers |
-| `resources/` | Qt resources: icons, colormaps, textures (`resources.qrc`) |
+| `pvp/visualization/vtk/` | VTK actors, boundary partitions, clip plane, mouse interaction |
+| `pvp/visualization/qtquick/` | `VTKItem`: VTK rendering inside Qt Quick |
+| `pvp/meshing/` | Mesher interface (`TetMesher.py`) and fTetWild implementation |
+| `pvp/fileio/` | Readers and writers; `formats.py` maps extensions and lists the export formats |
+| `pvp/geometry/` | Mesh data interface/containers, pre-processing session, geometry helpers |
+| `resources/` | Qt resources: icons, colormaps (`resources.qrc`) |
 | `tests/` | pytest suite |
 | `external/fTetWild` | fTetWild (git submodule) |
 | `external/floattetwild-wrapper` | pybind11 wrapper around fTetWild |

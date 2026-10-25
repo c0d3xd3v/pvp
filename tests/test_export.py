@@ -5,7 +5,7 @@ import numpy as np
 import ngsolve as ngs
 import pytest
 
-from controllers.PreProcCtrl import PreProcCtrl
+from pvp.controllers.PreProcCtrl import PreProcCtrl
 
 
 @dataclass

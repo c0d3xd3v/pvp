@@ -3,8 +3,8 @@ import h5py
 import numpy as np
 import pytest
 
-from fileio.project_h5 import ProjectState, load_project, save_project
-from geometry.Partition import Partition
+from pvp.fileio.project_h5 import ProjectState, load_project, save_project
+from pvp.geometry.Partition import Partition
 
 
 @pytest.fixture

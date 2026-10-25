@@ -7,11 +7,11 @@ import numpy as np
 import meshio
 import pytest
 
-from fileio.InpWriter import (
+from pvp.fileio.InpWriter import (
     write_inp_calculix, write_inp_abaqus, _OPPOSITE_LOCAL_TO_FACE,
     _INSTANCE_NAME,
 )
-from fileio.export_model import ExportMesh, BCGroup
+from pvp.fileio.export_model import ExportMesh, BCGroup
 
 
 def _two_bc_groups(P, F):

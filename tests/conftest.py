@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-# The app modules live in the repo root (no package), make them importable.
+# The app package (pvp/) lives in the repo root, make it importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 

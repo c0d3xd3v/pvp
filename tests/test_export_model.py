@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from fileio.export_model import (
+from pvp.fileio.export_model import (
     ExportMesh, BCGroup, add_midside_nodes, tri6_connectivity,
 )
 

@@ -16,21 +16,17 @@ Item {
         { label: "Inches (in)",      scale: 25.4 },
     ]
 
-    function __isSurface(path) {
-        var p = path.toLowerCase()
-        return p.endsWith(".stl") || p.endsWith(".obj")
-    }
 
     function open() {
         nativeDialog.open()
     }
 
     function openWithPath(url) {
-        var path = url.toString()
-        if (path.endsWith(".vtk")) {
+        var kind = MainCtrl.fileKind(url.toString())
+        if (kind === "result") {
             root.__pendingPath = url
             resultTypeDialog.open()
-        } else if (__isSurface(path)) {
+        } else if (kind === "surface") {
             root.__pendingPath = url
             unitsDialog.open()
         } else {
@@ -43,11 +39,11 @@ Item {
         title: "Select File"
 
         onAccepted: {
-            var path = nativeDialog.selectedFile.toString()
-            if (path.endsWith(".vtk")) {
+            var kind = MainCtrl.fileKind(nativeDialog.selectedFile.toString())
+            if (kind === "result") {
                 root.__pendingPath = nativeDialog.selectedFile
                 resultTypeDialog.open()
-            } else if (__isSurface(path)) {
+            } else if (kind === "surface") {
                 root.__pendingPath = nativeDialog.selectedFile
                 unitsDialog.open()
             } else {

@@ -22,7 +22,7 @@ def _check_vtk():
     # The app imports only a subset of VTK (visualization/vtk/vtklib.py). Some
     # of it is needed solely for object-factory overrides, which would only fail
     # later at render time — check that those resolve to the real implementations.
-    from visualization.vtk import vtklib as vtk
+    from pvp.visualization.vtk import vtklib as vtk
     impl = {
         "vtkPolyDataMapper": vtk.vtkPolyDataMapper().GetClassName(),
         "vtkRenderer": vtk.vtkRenderer().GetClassName(),
@@ -43,7 +43,7 @@ def _check_vtk():
 def _check_qml():
     from PySide6.QtCore import QUrl
     from PySide6.QtQml import QQmlEngine, QQmlComponent
-    import visualization.qtquick.VTKItem  # noqa: F401  registers QmlVtk
+    import pvp.visualization.qtquick.VTKItem  # noqa: F401  registers QmlVtk
     from resources import resources       # noqa: F401  qrc:/ data
 
     engine = QQmlEngine()
@@ -59,9 +59,9 @@ def _check_meshing_and_export():
     import numpy as np
     import ngsolve
     from netgen.csg import unit_cube
-    from meshing.FTetWildMesher import FTetWildMesher
-    from fileio.NetgenVolWriter import write_vol
-    from fileio.export_model import ExportMesh, BCGroup
+    from pvp.meshing.FTetWildMesher import FTetWildMesher
+    from pvp.fileio.NetgenVolWriter import write_vol
+    from pvp.fileio.export_model import ExportMesh, BCGroup
 
     m = unit_cube.GenerateMesh(maxh=0.5)
     P = np.array([[p[0], p[1], p[2]] for p in m.Points()])

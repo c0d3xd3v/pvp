@@ -2,10 +2,10 @@
 import numpy as np
 import pytest
 
-from controllers.SceneCtrl import _triangle_polydata
-from visualization.vtk.BoundaryPartitions import BoundaryPartitions, UNASSIGNED
-from visualization.vtk.ClipPlane import ClipPlane
-from visualization.vtk.FaceSelectionActor import FaceSelectionActor
+from pvp.controllers.SceneCtrl import _triangle_polydata
+from pvp.visualization.vtk.BoundaryPartitions import BoundaryPartitions, UNASSIGNED
+from pvp.visualization.vtk.ClipPlane import ClipPlane
+from pvp.visualization.vtk.FaceSelectionActor import FaceSelectionActor
 
 
 @pytest.fixture
@@ -115,7 +115,7 @@ def test_undo_limit_and_unrecorded_edits(parts):
 
 def test_restore_takes_ids_and_colors_verbatim(parts):
     bp, n, *_ = parts
-    from geometry.Partition import Partition
+    from pvp.geometry.Partition import Partition
     ids = np.zeros(n, dtype=np.int32)
     ids[:4] = 7
     bp.restore([Partition(7, "outlet", (0.3, 0.4, 0.5))], ids, next_id=8, current=7)

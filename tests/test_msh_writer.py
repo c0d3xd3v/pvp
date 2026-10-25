@@ -5,8 +5,8 @@ import numpy as np
 import meshio
 import pytest
 
-from fileio.MshWriter import write_msh_v2, write_msh_v4
-from fileio.export_model import ExportMesh, BCGroup
+from pvp.fileio.MshWriter import write_msh_v2, write_msh_v4
+from pvp.fileio.export_model import ExportMesh, BCGroup
 
 
 def _split_cube_faces(P, F):

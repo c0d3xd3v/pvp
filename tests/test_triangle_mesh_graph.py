@@ -2,14 +2,13 @@
 import numpy as np
 import pytest
 
-from controllers.SceneCtrl import _triangle_polydata
-from geometry.TriangleMeshGraph import TriangleMeshGraph
+from pvp.geometry.TriangleMeshGraph import TriangleMeshGraph
 
 
 @pytest.fixture
 def cube(unit_cube):
     P, _, F = unit_cube
-    return TriangleMeshGraph(_triangle_polydata(P, F)), P, F
+    return TriangleMeshGraph(P, F), P, F
 
 
 def _side(P, tri):
@@ -40,9 +39,40 @@ def test_large_angle_joins_everything_and_angle_change_recomputes(cube):
     assert len(g.region(0)) < len(F)
 
 
+def _flood_fill(F, normals, start, angle):
+    """Reference: breadth-first search across shared edges with similar normals."""
+    from collections import defaultdict, deque
+    by_edge = defaultdict(list)
+    for f, tri in enumerate(F):
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            by_edge[tuple(sorted((tri[a], tri[b])))].append(f)
+    neighbours = defaultdict(set)
+    for faces in by_edge.values():
+        for f in faces:
+            neighbours[f].update(g for g in faces if g != f)
+    cos = np.cos(np.radians(angle))
+    seen, queue = {start}, deque([start])
+    while queue:
+        f = queue.popleft()
+        for g in neighbours[f]:
+            if g not in seen and normals[f] @ normals[g] > cos:
+                seen.add(g)
+                queue.append(g)
+    return sorted(seen)
+
+
 def test_matches_flood_fill_on_clean_mesh(cube):
-    g, _, F = cube
+    g, P, F = cube
     g.set_normal_compare_angle(10.0)
+    n = np.cross(P[F[:, 1]] - P[F[:, 0]], P[F[:, 2]] - P[F[:, 0]])
+    n /= np.linalg.norm(n, axis=1, keepdims=True)
     for f in range(len(F)):
-        g.reset()
-        assert sorted(g.BFS(f)) == sorted(g.region(f).tolist())
+        assert _flood_fill(F, n, f, 10.0) == sorted(g.region(f).tolist())
+
+
+def test_non_manifold_edge_connects_all_its_faces():
+    # three fins sharing the edge (0, 1)
+    V = np.array([[0, 0, 0], [1, 0, 0], [0.5, 1, 0], [0.5, -1, 0], [0.5, 0, 1]], dtype=float)
+    F = np.array([[0, 1, 2], [1, 0, 3], [0, 1, 4]])
+    g = TriangleMeshGraph(V, F, angle=180.0)
+    assert sorted(g.region(0).tolist()) == [0, 1, 2]

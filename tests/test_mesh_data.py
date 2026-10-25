@@ -1,13 +1,13 @@
 """Every geometry source implements AbstractGeometryData consistently."""
 import numpy as np
 
-from geometry.AbstractMeshData import AbstractGeometryData
-from geometry.InMemoryMeshData import InMemoryMeshData
-from geometry.OBBMeshGenerator import OBBMeshGenerator
-from fileio.NetgenVolWriter import write_vol
-from fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
-from fileio.SurfaceMeshGeometryFile import TriangleSurfaceMeshGeometryFile
-from fileio.export_model import ExportMesh, BCGroup
+from pvp.geometry.AbstractMeshData import AbstractGeometryData
+from pvp.geometry.InMemoryMeshData import InMemoryMeshData
+from pvp.geometry.OBBMeshGenerator import OBBMeshGenerator
+from pvp.fileio.NetgenVolWriter import write_vol
+from pvp.fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
+from pvp.fileio.SurfaceMeshGeometryFile import TriangleSurfaceMeshGeometryFile
+from pvp.fileio.export_model import ExportMesh, BCGroup
 
 
 def test_surface_only_defaults(tmp_path, unit_cube):

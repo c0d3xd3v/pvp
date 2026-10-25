@@ -8,11 +8,31 @@ class FaceSelectionActor(vtk.vtkActor):
         self.full_polydata = None
         self.current_mode = "cell"          # 'cell' or 'partition'
         self.lut = None
+        self._face_connectivity = None      # Mx3 numpy array of point ids
 
         self.mapper = vtk.vtkOpenGLPolyDataMapper()
         self.SetMapper(self.mapper)
         self.GetProperty().SetInterpolationToFlat()
         self.SetPickable(True)
+
+        # Hover-preview overlay: shares the surface's points, holds only the
+        # hovered triangles, pulled toward the camera against z-fighting.
+        self._preview_polydata = vtk.vtkPolyData()
+        self._preview_mapper = vtk.vtkOpenGLPolyDataMapper()
+        self._preview_mapper.SetInputData(self._preview_polydata)
+        self._preview_mapper.ScalarVisibilityOff()
+        self._preview_mapper.SetResolveCoincidentTopologyToPolygonOffset()
+        self._preview_mapper.SetRelativeCoincidentTopologyPolygonOffsetParameters(-2.0, -2.0)
+        self._preview_mapper.SetRelativeCoincidentTopologyLineOffsetParameters(-2.0, -2.0)
+        self.preview_actor = vtk.vtkActor()
+        self.preview_actor.SetMapper(self._preview_mapper)
+        self.preview_actor.SetPickable(False)
+        prop = self.preview_actor.GetProperty()
+        prop.SetInterpolationToFlat()
+        prop.LightingOff()
+        prop.SetColor(1.0, 1.0, 1.0)
+        prop.SetOpacity(0.45)
+        self.preview_actor.SetVisibility(False)
 
     def setPolyData(self, polydata: vtk.vtkPolyData, partition_ids: np.ndarray = None):
         # ---- Add OriginalIds (cell indices) ----
@@ -23,6 +43,15 @@ class FaceSelectionActor(vtk.vtkActor):
         id_filter.SetCellIdsArrayName("OriginalIds")
         id_filter.Update()
         self.full_polydata = id_filter.GetOutput()
+
+        polys = self.full_polydata.GetPolys()
+        if polys and polys.GetNumberOfCells() > 0:
+            cell_data = vtk_to_numpy(polys.GetData())
+            self._face_connectivity = cell_data.reshape(-1, 4)[:, 1:4]
+        else:
+            self._face_connectivity = None
+        self._preview_polydata.SetPoints(self.full_polydata.GetPoints())
+        self.clear_preview()
 
         # ---- Add PartitionIds if provided ----
         if partition_ids is not None:
@@ -119,6 +148,29 @@ class FaceSelectionActor(vtk.vtkActor):
         # Range is always 0 .. num_entries-1 (LUT covers all)
         self.mapper.SetScalarRange(0, self.lut.GetNumberOfTableValues() - 1)
         self.mapper.Modified()
+
+    def set_preview(self, face_ids, color=(1.0, 1.0, 1.0)):
+        """Highlight the given triangles (OriginalIds) on top of the surface."""
+        if self._face_connectivity is None or len(face_ids) == 0:
+            self.clear_preview()
+            return
+        sub = self._face_connectivity[np.asarray(face_ids, dtype=np.int64)]
+        npts = np.full(len(sub), 3, dtype=np.int64)
+        conn = np.column_stack((npts, sub)).ravel()
+        cells = vtk.vtkCellArray()
+        cells.SetCells(len(sub), numpy_to_vtk(conn, deep=True, array_type=vtk.VTK_ID_TYPE))
+        self._preview_polydata.SetPolys(cells)
+        self._preview_polydata.Modified()
+        self.set_preview_color(color)
+        self.preview_actor.SetVisibility(True)
+
+    def set_preview_color(self, color):
+        self.preview_actor.GetProperty().SetColor(*color)
+
+    def clear_preview(self):
+        self.preview_actor.SetVisibility(False)
+        self._preview_polydata.SetPolys(vtk.vtkCellArray())
+        self._preview_polydata.Modified()
 
     # Optional: edge rendering
     def enableEdges(self):

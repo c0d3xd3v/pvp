@@ -40,6 +40,8 @@ class MainCtrl(QObject):
         self.__meshing_ctrl.set_controllers(self.__prepoc_ctrl, self.__scene_ctrl)
         self.__selection_ctrl.update_partition.connect(self.__scene_ctrl.interactive_select)
         self.__selection_ctrl.clear_partition.connect(self.__scene_ctrl.interactive_deselect)
+        self.__selection_ctrl.preview_partition.connect(self.__scene_ctrl.interactive_preview)
+        self.__selection_ctrl.clear_preview.connect(self.__scene_ctrl.interactive_clear_preview)
 
     def set_cmd_args(self, args):
         # Loading needs the VTK renderer, which only exists after the first frame;
@@ -60,6 +62,7 @@ class MainCtrl(QObject):
         self.__scene_ctrl.set_vtk_item(item)
         item.mouse_interactor.qt_signals.cell_picked.connect(self.__selection_ctrl.face_selected)
         item.mouse_interactor.qt_signals.cell_right_picked.connect(self.__selection_ctrl.face_deselected)
+        item.mouse_interactor.qt_signals.cell_hovered.connect(self.__selection_ctrl.face_hovered)
         # rendererInitialized is emitted on the render thread; connecting it to a
         # slot of this (GUI-thread) object makes the call queued onto the GUI thread.
         item.rendererInitialized.connect(self.__on_renderer_ready)

@@ -24,12 +24,14 @@ class BoundaryPartitions:
     and keeps the actor's colors in sync.
     """
 
-    def __init__(self, request_render=lambda: None):
+    def __init__(self, request_render=lambda: None, set_hover_enabled=lambda _enabled: None):
         self.__actor = None
         self.__partitions: dict[int, Partition] = {}
         self.__current_id: int | None = None
         self.__next_id = 1
         self.__request_render = request_render
+        # hover preview only makes sense while a partition is current
+        self.__set_hover_enabled = set_hover_enabled
         self.on_changed = None   # called after any change of names/colors/selection
 
     def attach(self, actor):
@@ -39,10 +41,12 @@ class BoundaryPartitions:
         self.__current_id = None
         self.__next_id = 1
         self.__sync_colors()
+        self.__set_hover_enabled(False)
         self.__notify()
 
     def detach(self):
         self.__actor = None
+        self.__set_hover_enabled(False)
 
     def add(self, name: str) -> int:
         pid = self.__next_id
@@ -64,12 +68,20 @@ class BoundaryPartitions:
         del self.__partitions[pid]
         if self.__current_id == pid:
             self.__current_id = None
+            self.__set_hover_enabled(False)
+            self.clear_preview()
         self.__sync_colors()
         self.__notify()
         self.__request_render()
 
     def set_current(self, pid: int | None):
         self.__current_id = pid if pid in self.__partitions else None
+        self.__set_hover_enabled(self.__current_id is not None)
+        if self.__current_id is None:
+            self.clear_preview()
+        elif self.__actor is not None:
+            self.__actor.set_preview_color(self._preview_color())
+            self.__request_render()
         self.__notify()
 
     def current_id(self) -> int | None:
@@ -92,6 +104,30 @@ class BoundaryPartitions:
             return
         self.__actor.updatePartitions(face_ids, UNASSIGNED)
         self.__request_render()
+
+    def preview_faces(self, face_ids):
+        """Hover preview: highlight the region a click would paint, tinted
+        with the current partition's color."""
+        if self.__actor is None or len(face_ids) == 0:
+            self.clear_preview()
+            return
+        self.__actor.set_preview(face_ids, self._preview_color())
+        self.__request_render()
+
+    def clear_preview(self):
+        if self.__actor is None:
+            return
+        self.__actor.clear_preview()
+        self.__request_render()
+
+    def _preview_color(self):
+        if self.__current_id is None or self.__current_id not in self.__partitions:
+            return (1.0, 1.0, 1.0)
+        r, g, b = self.__partitions[self.__current_id].color
+        mix = 0.55   # blend toward white so it stands out on a face already in that color
+        return (r + (1.0 - r) * mix,
+                g + (1.0 - g) * mix,
+                b + (1.0 - b) * mix)
 
     def ids_per_cell(self):
         """Partition id per surface triangle (copy), or None without a surface."""

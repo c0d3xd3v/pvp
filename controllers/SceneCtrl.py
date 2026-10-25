@@ -44,7 +44,10 @@ class SceneCtrl(QObject):
         self.__volume_clip_filter = None
         self.__clip = ClipPlane()
         self.__wireframe = False
-        self.partitions = BoundaryPartitions(request_render=self.__render)
+        self.partitions = BoundaryPartitions(
+            request_render=self.__render,
+            set_hover_enabled=self.__set_hover_enabled,
+        )
 
     def set_vtk_item(self, vtkitem):
         self.__vtkitem = vtkitem
@@ -55,6 +58,10 @@ class SceneCtrl(QObject):
         if self.__vtkitem is not None:
             self.__vtkitem.update()
 
+    def __set_hover_enabled(self, enabled: bool):
+        if self.__vtkitem is not None:
+            self.__vtkitem.mouse_interactor.set_hover_enabled(enabled)
+
     def __renderer(self) -> vtk.vtkRenderer:
         return self.__vtkitem.renderer.renderer
 
@@ -64,6 +71,8 @@ class SceneCtrl(QObject):
         for actor in [self.__actor, self.__result_actor, *self.__role_actors.values()]:
             if actor is not None:
                 self.__renderer().RemoveActor(actor)
+        if self.__actor is not None:
+            self.__renderer().RemoveActor(self.__actor.preview_actor)
         self.__role_actors.clear()
         self.__volume_ug = None
         self.__volume_clip_filter = None
@@ -107,6 +116,7 @@ class SceneCtrl(QObject):
             if self.__wireframe:
                 self.__actor.enableEdges()
             self.__renderer().AddActor(self.__actor)
+            self.__renderer().AddActor(self.__actor.preview_actor)
             self.__renderer().ResetCamera()
             self.__clip.reposition()
             # Re-assert the widget's EnabledOn state: swapping the scene's
@@ -182,6 +192,12 @@ class SceneCtrl(QObject):
 
     def interactive_deselect(self, face_ids):
         self.partitions.clear_faces(face_ids)
+
+    def interactive_preview(self, face_ids):
+        self.partitions.preview_faces(face_ids)
+
+    def interactive_clear_preview(self):
+        self.partitions.clear_preview()
 
     @Slot(bool)
     def toogleWireframe(self, toogle):

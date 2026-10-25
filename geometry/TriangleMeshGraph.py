@@ -3,6 +3,8 @@ from typing import List, Optional, Dict, Set, Tuple
 import sys
 import igl
 import numpy as np
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 
 from geometry.ConditionalGraph import ConditionalGraph
 from geometry.ConditionalGraph import GraphCompareCondition
@@ -106,18 +108,23 @@ class TriangleMeshGraph(ConditionalGraph):
                 edge_to_faces[edge].append(face_idx)
 
         # Adjazenzliste erstellen
+        pairs = []
         for face_list in edge_to_faces.values():
             if len(face_list) == 2:
                 # Zwei Faces teilen sich eine Kante (Nachbarn)
                 f1, f2 = face_list
                 self.add_edge(f1, f2)
                 self.add_edge(f2, f1)
+                pairs.append((f1, f2))
             elif len(face_list) > 2:
                 # Mehr als 2 Faces teilen eine Kante (selten, aber möglich)
                 for i in range(len(face_list)):
                     for j in range(i + 1, len(face_list)):
                         self.add_edge(face_list[i], face_list[j])
                         self.add_edge(face_list[j], face_list[i])
+                        pairs.append((face_list[i], face_list[j]))
+        self._pairs = np.array(pairs, dtype=np.int64).reshape(-1, 2)
+        self._regions = None
 
     def build_point_to_faces(self):
         num_points = len(self.vertices)
@@ -128,6 +135,32 @@ class TriangleMeshGraph(ConditionalGraph):
 
     def set_normal_compare_angle(self, angle):
         self.condition.angle_threshold = angle
+        self._regions = None
+
+    def region(self, face_id: int) -> np.ndarray:
+        """All faces connected to face_id across edges whose two normals differ
+        by less than the compare angle (what a click selects)."""
+        labels, order, starts = self.__region_index()
+        lab = labels[face_id]
+        return order[starts[lab]:starts[lab + 1]]
+
+    def region_label(self, face_id: int) -> int:
+        return int(self.__region_index()[0][face_id])
+
+    def __region_index(self):
+        # Computed once per angle with NumPy/SciPy; a Python flood fill per hover
+        # took up to seconds on large flat faces.
+        if self._regions is None:
+            n = self.condition.compute_all_normals()
+            p0, p1 = self._pairs[:, 0], self._pairs[:, 1]
+            smooth = np.einsum("ij,ij->i", n[p0], n[p1]) > np.cos(np.radians(self.condition.angle_threshold))
+            graph = coo_matrix((np.ones(int(smooth.sum()), dtype=np.int8), (p0[smooth], p1[smooth])),
+                               shape=(self.num_faces, self.num_faces))
+            _, labels = connected_components(graph, directed=False)
+            order = np.argsort(labels, kind="stable")
+            starts = np.searchsorted(labels[order], np.arange(labels.max() + 2))
+            self._regions = (labels, order, starts)
+        return self._regions
 
     def compute_geometric_center(self) -> np.ndarray:
         """

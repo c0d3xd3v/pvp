@@ -1,3 +1,4 @@
+import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -62,6 +63,10 @@ ApplicationWindow {
         }
 
     }
+
+    // Undo/redo of boundary assignments (text fields keep their own undo while focused)
+    Shortcut { sequences: [StandardKey.Undo]; onActivated: PreProcCtrl.undo() }
+    Shortcut { sequences: [StandardKey.Redo]; onActivated: PreProcCtrl.redo() }
 
     // DropArea at top level — reacts to drops anywhere in the window
     DropArea {

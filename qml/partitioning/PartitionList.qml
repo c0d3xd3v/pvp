@@ -13,7 +13,10 @@ Item {
     Connections {
         target: PreProcCtrl
         function onPartitionsChanged() { partitionsRoot.partitions = PreProcCtrl.getPartitions() }
-        function onSessionChanged()    { partitionsRoot.partitions = PreProcCtrl.getPartitions() }
+        function onSessionChanged() {
+            partitionsRoot.partitions = PreProcCtrl.getPartitions()
+            angleSpin.value = Math.round(SelectionCtrl.getNormalCompareAngle())   // a loaded project brings its own
+        }
     }
 
     ColumnLayout {

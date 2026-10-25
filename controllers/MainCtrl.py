@@ -19,6 +19,7 @@ from visualization.qtquick.VTKItem import VTKItem
 _VOLUME_EXTS  = {".vol", ".msh"}
 _SURFACE_EXTS = {".obj", ".stl"}
 _RESULT_EXTS  = {".vtk"}
+_PROJECT_EXT  = ".pvp"
 
 
 class MainCtrl(QObject):
@@ -101,6 +102,10 @@ class MainCtrl(QObject):
             self.__exit_result_mode()
             self.__prepoc_ctrl.loadVolume(file_path)
             self.meshLoaded.emit("geometry")
+        elif ext == _PROJECT_EXT:
+            self.__exit_result_mode()
+            if self.__prepoc_ctrl.loadProject(file_path) == "":
+                self.meshLoaded.emit("geometry")
 
     def __exit_result_mode(self):
         self.__scene_ctrl.clear_result_actor()

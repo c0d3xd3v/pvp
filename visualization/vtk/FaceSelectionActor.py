@@ -87,20 +87,16 @@ class FaceSelectionActor(vtk.vtkActor):
         if part_arr is None:
             raise RuntimeError("PartitionIds array not found. Call setPolyData with partition_ids first.")
 
-        part_np = vtk_to_numpy(part_arr)
+        part_np = vtk_to_numpy(part_arr).copy()
+        # face_ids sind OriginalIds (entsprechen den Zell-Indizes im full_polydata)
+        part_np[np.asarray(face_ids, dtype=np.int64)] = new_partition_id
+        self.set_partition_ids(part_np)
 
-        # 2. Für jede angegebene Zelle die Partition‑ID ändern
-        #    face_ids sind OriginalIds (entsprechen den Zell‑Indizes im full_polydata)
-        for cell_id in face_ids:
-            part_np[cell_id] = new_partition_id
-
-        # 3. Array im Polydata ersetzen (Änderungen müssen zurück nach VTK)
-        new_vtk_arr = numpy_to_vtk(part_np, deep=True, array_type=vtk.VTK_INT)
-        new_vtk_arr.SetName("PartitionIds")
-        self.full_polydata.GetCellData().RemoveArray("PartitionIds")
-        self.full_polydata.GetCellData().AddArray(new_vtk_arr)
-
-        # 4. Falls aktuell der Partition‑Modus aktiv ist, Mapper aktualisieren
+    def set_partition_ids(self, partition_ids: np.ndarray):
+        """Replace the whole PartitionIds array (one id per surface triangle)."""
+        if self.full_polydata is None:
+            return
+        self._add_partition_array(np.asarray(partition_ids, dtype=np.int32))
         if self.current_mode == "partition":
             self.setColorMode("partition")   # löst Neuzeichnen aus
         else:

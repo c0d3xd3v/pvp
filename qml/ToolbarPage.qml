@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 RowLayout {
     id: toolbarLayout
@@ -40,6 +41,51 @@ RowLayout {
         onClicked: function() {
             fileDialog.open()
         }
+    }
+
+    RoundButton {
+        id: saveProjectButton
+        Layout.preferredWidth: btnSize
+        Layout.preferredHeight: btnSize
+        padding: 6
+        flat: true
+        icon.name: "document-save"
+        display: AbstractButton.IconOnly
+        enabled: PreProcCtrl.canSaveProject()
+        ToolTip.visible: hovered
+        ToolTip.text: "Save project (.pvp)"
+        ToolTip.delay: 500
+        onClicked: saveProjectDialog.open()
+
+        Connections {
+            target: PreProcCtrl
+            function onSessionChanged() { saveProjectButton.enabled = PreProcCtrl.canSaveProject() }
+        }
+    }
+
+    FileDialog {
+        id: saveProjectDialog
+        title: "Save project"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["pvp project (*.pvp)"]
+        defaultSuffix: "pvp"
+        onAccepted: {
+            var err = PreProcCtrl.saveProject(saveProjectDialog.selectedFile.toString())
+            if (err !== "") {
+                saveErrorLabel.text = err
+                saveErrorDialog.open()
+            }
+        }
+    }
+
+    Dialog {
+        id: saveErrorDialog
+        title: "Saving failed"
+        modal: true
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok
+        Label { id: saveErrorLabel; wrapMode: Text.WordWrap }
     }
 
     RoundButton {

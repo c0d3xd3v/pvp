@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 from vtkmodules.util.numpy_support import vtk_to_numpy
 
@@ -34,6 +36,8 @@ class BoundaryPartitions:
         # hover preview only makes sense while a partition is current
         self.__set_hover_enabled = set_hover_enabled
         self.on_changed = None   # called after any change of names/colors/selection
+        self.__undo: list[tuple] = []
+        self.__redo: list[tuple] = []
 
     @scene_locked
     def attach(self, actor):
@@ -42,6 +46,8 @@ class BoundaryPartitions:
         self.__partitions.clear()
         self.__current_id = None
         self.__next_id = 1
+        self.__undo.clear()
+        self.__redo.clear()
         self.__sync_colors()
         self.__set_hover_enabled(False)
         self.__notify()
@@ -52,7 +58,60 @@ class BoundaryPartitions:
         self.__set_hover_enabled(False)
 
     @scene_locked
-    def add(self, name: str) -> int:
+    def restore(self, partitions: list[Partition], ids_per_cell, next_id: int,
+                current: int | None):
+        """Take over a saved state 1:1 (ids, names, colors); clears undo/redo."""
+        self.__apply((np.asarray(ids_per_cell, dtype=np.int32).copy(),
+                      {p.id: replace(p) for p in partitions}, next_id, current))
+        self.__undo.clear()
+        self.__redo.clear()
+
+    # --- undo / redo ---------------------------------------------------------
+    # Snapshots of the whole state: one int per triangle, cheap enough for the
+    # mesh sizes we handle, and immune to subtle inverse-operation bugs.
+    _UNDO_LIMIT = 50
+
+    def __snapshot(self) -> tuple:
+        return (self.ids_per_cell(), {pid: replace(p) for pid, p in self.__partitions.items()},
+                self.__next_id, self.__current_id)
+
+    def __record(self):
+        self.__undo.append(self.__snapshot())
+        del self.__undo[:-self._UNDO_LIMIT]
+        self.__redo.clear()
+
+    def __apply(self, snap: tuple):
+        ids, partitions, next_id, current = snap
+        self.__partitions = dict(partitions)
+        self.__next_id = max([next_id, *(pid + 1 for pid in partitions)])
+        if self.__actor is not None and ids is not None:
+            self.__actor.set_partition_ids(ids)
+        self.__sync_colors()
+        self.set_current(current)    # also hover state + preview tint, notifies
+        self.__request_render()
+
+    @scene_locked
+    def undo(self) -> bool:
+        if not self.__undo:
+            return False
+        self.__redo.append(self.__snapshot())
+        self.__apply(self.__undo.pop())
+        return True
+
+    @scene_locked
+    def redo(self) -> bool:
+        if not self.__redo:
+            return False
+        self.__undo.append(self.__snapshot())
+        self.__apply(self.__redo.pop())
+        return True
+
+    # --- edits ---------------------------------------------------------------
+
+    @scene_locked
+    def add(self, name: str, record: bool = True) -> int:
+        if record:
+            self.__record()
         pid = self.__next_id
         self.__next_id += 1
         color = _PALETTE[(pid - 1) % len(_PALETTE)]
@@ -62,9 +121,11 @@ class BoundaryPartitions:
         return pid
 
     @scene_locked
-    def delete(self, pid: int):
+    def delete(self, pid: int, record: bool = True):
         if pid not in self.__partitions:
             return
+        if record:
+            self.__record()
         ids = self.ids_per_cell()
         if ids is not None:
             cells = np.where(ids == pid)[0].tolist()
@@ -93,24 +154,35 @@ class BoundaryPartitions:
     def current_id(self) -> int | None:
         return self.__current_id
 
+    def next_id(self) -> int:
+        return self.__next_id
+
     def all(self) -> list[Partition]:
         return sorted(self.__partitions.values(), key=lambda p: p.id)
 
     @scene_locked
-    def assign_faces(self, face_ids, pid: int):
+    def assign_faces(self, face_ids, pid: int, record: bool = True):
         """Assign cells (indices into the surface triangles) to a partition."""
-        if self.__actor is None or pid not in self.__partitions or len(face_ids) == 0:
+        if self.__actor is None or pid not in self.__partitions:
             return
-        self.__actor.updatePartitions(face_ids, pid)
-        self.__request_render()
+        self.__set_faces(face_ids, pid, record)
 
     @scene_locked
-    def clear_faces(self, face_ids):
+    def clear_faces(self, face_ids, record: bool = True):
         """Reset the given cells back to unassigned, regardless of which
         partition they currently belong to."""
-        if self.__actor is None or len(face_ids) == 0:
+        if self.__actor is None:
             return
-        self.__actor.updatePartitions(face_ids, UNASSIGNED)
+        self.__set_faces(face_ids, UNASSIGNED, record)
+
+    def __set_faces(self, face_ids, pid: int, record: bool):
+        faces = np.asarray(face_ids, dtype=np.int64)
+        ids = self.ids_per_cell()
+        if faces.size == 0 or ids is None or np.all(ids[faces] == pid):
+            return      # nothing changes: no redraw, no empty undo step
+        if record:
+            self.__record()
+        self.__actor.updatePartitions(faces, pid)
         self.__request_render()
 
     @scene_locked

@@ -22,13 +22,13 @@ class _FakePartitions:
         self.on_changed = None
 
     # BC-transfer path
-    def add(self, name: str) -> int:
+    def add(self, name: str, record: bool = True) -> int:
         pid = self._next
         self._next += 1
         self._names[pid] = name
         return pid
 
-    def assign_faces(self, face_ids, pid: int):
+    def assign_faces(self, face_ids, pid: int, record: bool = True):
         if self._ids_per_cell is None:
             return
         self._ids_per_cell[list(face_ids)] = pid

@@ -64,6 +64,67 @@ def test_attach_starts_over(parts, unit_cube):
     assert bp.ids_per_cell() is None
 
 
+def test_undo_redo_assignments(parts):
+    bp, n, *_ = parts
+    a = bp.add("inlet")
+    bp.assign_faces([0, 1, 2], a)
+    bp.assign_faces([0, 1, 2], a)                  # no change -> no extra undo step
+    bp.clear_faces([1])
+    assert list(bp.ids_per_cell()[:3]) == [a, UNASSIGNED, a]
+
+    assert bp.undo() and list(bp.ids_per_cell()[:3]) == [a, a, a]
+    assert bp.undo() and np.all(bp.ids_per_cell() == UNASSIGNED)
+    assert bp.undo() and bp.all() == []            # the add itself
+    assert not bp.undo()
+
+    assert bp.redo() and [p.name for p in bp.all()] == ["inlet"]
+    assert bp.redo() and list(bp.ids_per_cell()[:3]) == [a, a, a]
+    bp.assign_faces([5], a)                        # a new edit drops the redo branch
+    assert not bp.redo()
+
+
+def test_undo_delete_restores_name_color_and_faces(parts):
+    bp, *_ = parts
+    a = bp.add("inlet")
+    bp.assign_faces([0, 1], a)
+    color = bp.all()[0].color
+    bp.set_current(a)
+    bp.delete(a)
+    assert bp.all() == [] and bp.current_id() is None
+    assert bp.undo()
+    assert [(p.id, p.name, p.color) for p in bp.all()] == [(a, "inlet", color)]
+    assert list(bp.ids_per_cell()[:2]) == [a, a] and bp.current_id() == a
+    assert bp.add("next") == a + 1                 # ids are not reused after undo
+
+
+def test_undo_limit_and_unrecorded_edits(parts):
+    bp, n, *_ = parts
+    a = bp.add("inlet", record=False)
+    bp.assign_faces([0], a, record=False)
+    assert not bp.undo()
+    for k in range(60):                            # 60 real changes on face 1
+        if k % 2 == 0:
+            bp.assign_faces([1], a)
+        else:
+            bp.clear_faces([1])
+    steps = 0
+    while bp.undo():
+        steps += 1
+    assert steps == 50
+
+
+def test_restore_takes_ids_and_colors_verbatim(parts):
+    bp, n, *_ = parts
+    from geometry.Partition import Partition
+    ids = np.zeros(n, dtype=np.int32)
+    ids[:4] = 7
+    bp.restore([Partition(7, "outlet", (0.3, 0.4, 0.5))], ids, next_id=8, current=7)
+    assert [(p.id, p.name, p.color) for p in bp.all()] == [(7, "outlet", (0.3, 0.4, 0.5))]
+    assert np.array_equal(bp.ids_per_cell(), ids) and bp.current_id() == 7
+    assert not bp.undo()
+    assert bp.add("next") == 8
+
+
 def test_clip_axis_and_volume_filter(unit_cube):
     import vtk
     from vtkmodules.util.numpy_support import numpy_to_vtk

@@ -66,10 +66,14 @@ class MeshingCtrl(QObject):
         if not m:
             return []
         bbox_diag = self.__current_bbox_diagonal()
+        # Prefill with the parameters of the last run on this geometry (also
+        # restored from a project file), else the mesher's defaults.
+        session = self.__preproc_ctrl.get_session() if self.__preproc_ctrl else None
+        last = session.mesher_params if session and session.mesher_name == mesher_name else {}
         return [{
             "name":    p.name,
             "label":   p.label,
-            "default": p.default,
+            "default": last.get(p.name, p.default),
             "min":     p.min_value,
             "max":     p.max_value,
             "step":    p.step,
@@ -108,6 +112,9 @@ class MeshingCtrl(QObject):
         F = np.array(surface.data.get_triangles(), dtype=np.int32)
         param_dict = {k: float(v) for k, v in dict(params).items()}
         print(f"Meshing: {mesher_name} params={param_dict}")
+        session = self.__preproc_ctrl.get_session()
+        session.mesher_name = mesher_name
+        session.mesher_params = dict(param_dict)
 
         self.__thread = QThread()
         self.__worker = _MeshingWorker(m, V, F, param_dict)

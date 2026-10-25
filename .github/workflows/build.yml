@@ -26,11 +26,11 @@ jobs:
       BUILD_DIR: ${{ github.workspace }}/external/floattetwild-wrapper/build
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -49,7 +49,7 @@ jobs:
       - name: Restore GMP (Windows)
         if: runner.os == 'Windows'
         id: gmp-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: C:/vcpkg/installed
           key: vcpkg-gmp-x64-windows-v1
@@ -60,7 +60,7 @@ jobs:
 
       - name: Save GMP (Windows)
         if: runner.os == 'Windows' && steps.gmp-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: C:/vcpkg/installed
           key: vcpkg-gmp-x64-windows-v1
@@ -68,7 +68,7 @@ jobs:
       # --- fTetWild Python module ------------------------------------------
       - name: Restore fTetWild build
         id: ftw-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: external/floattetwild-wrapper/build
           key: ftw-${{ runner.os }}-${{ hashFiles('external/floattetwild-wrapper/CMakeLists.txt', 'external/floattetwild-wrapper/cmake/**', 'external/floattetwild-wrapper/src/**', 'external/fTetWild/CMakeLists.txt', 'external/fTetWild/cmake/**', 'external/fTetWild/src/**') }}
@@ -88,7 +88,7 @@ jobs:
 
       - name: Save fTetWild build
         if: steps.ftw-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: external/floattetwild-wrapper/build
           key: ${{ steps.ftw-cache.outputs.cache-primary-key }}
@@ -127,7 +127,7 @@ jobs:
           else tar czf ../${{ matrix.artifact }}.tar.gz pvp; fi
           cd .. && ls -la ${{ matrix.artifact }}.*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.*
@@ -140,11 +140,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/*
           generate_release_notes: true

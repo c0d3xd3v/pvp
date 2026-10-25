@@ -1,23 +1,23 @@
-"""BoundaryPartitions on a real FaceSelectionActor, and ClipPlane basics (no window)."""
+"""Partitions model, its view on a real FaceSelectionActor, and ClipPlane basics (no window)."""
 import numpy as np
 import pytest
+from vtkmodules.util.numpy_support import vtk_to_numpy
 
 from pvp.controllers.SceneCtrl import _triangle_polydata
-from pvp.visualization.vtk.BoundaryPartitions import BoundaryPartitions, UNASSIGNED
+from pvp.model.partitions import Partitions, UNASSIGNED
 from pvp.visualization.vtk.ClipPlane import ClipPlane
 from pvp.visualization.vtk.FaceSelectionActor import FaceSelectionActor
+from pvp.visualization.vtk.PartitionView import PartitionView
 
 
 @pytest.fixture
 def parts(unit_cube):
-    P, T, F = unit_cube
-    actor = FaceSelectionActor()
-    actor.setPolyData(_triangle_polydata(P, F), np.zeros(len(F), dtype=np.int32))
-    renders, changes = [], []
-    bp = BoundaryPartitions(request_render=lambda: renders.append(1))
-    bp.on_changed = lambda: changes.append(1)
-    bp.attach(actor)
-    return bp, len(F), renders, changes
+    _, _, F = unit_cube
+    changes = []
+    bp = Partitions()
+    bp.subscribe(lambda ids, listed: changes.append((ids, listed)))
+    bp.reset(len(F))
+    return bp, len(F), changes
 
 
 def test_starts_unassigned(parts):
@@ -27,7 +27,7 @@ def test_starts_unassigned(parts):
 
 
 def test_add_assign_delete(parts):
-    bp, n, renders, changes = parts
+    bp, n, changes = parts
     a, b = bp.add("inlet"), bp.add("wall")
     assert [p.name for p in bp.all()] == ["inlet", "wall"]
     assert bp.all()[0].color != bp.all()[1].color
@@ -35,7 +35,8 @@ def test_add_assign_delete(parts):
     bp.assign_faces([0, 1, 2], a)
     bp.assign_faces([2, 3], b)                     # reassigning a face moves it
     ids = bp.ids_per_cell()
-    assert list(ids[:4]) == [a, a, b, b] and renders
+    assert list(ids[:4]) == [a, a, b, b]
+    assert changes[-1] == (True, False)            # assignments don't touch the list
 
     bp.set_current(a)
     bp.delete(a)                                   # its faces become unassigned
@@ -52,16 +53,44 @@ def test_unknown_partition_is_ignored(parts):
     assert np.all(bp.ids_per_cell() == UNASSIGNED) and bp.current_id() is None
 
 
-def test_attach_starts_over(parts, unit_cube):
-    bp, *_ = parts
-    bp.add("inlet")
-    P, T, F = unit_cube
-    actor = FaceSelectionActor()
-    actor.setPolyData(_triangle_polydata(P, F), np.zeros(len(F), dtype=np.int32))
-    bp.attach(actor)
-    assert bp.all() == []
-    bp.detach()
+def test_reset_starts_over(parts):
+    bp, n, _ = parts
+    a = bp.add("inlet")
+    bp.assign_faces([0], a)
+    bp.reset(n + 1)
+    assert bp.all() == [] and bp.current_id() is None and not bp.undo()
+    assert len(bp.ids_per_cell()) == n + 1 and not np.any(bp.ids_per_cell())
+    bp.reset(None)
     assert bp.ids_per_cell() is None
+    bp.clear_faces([0])                            # no surface: ignored
+
+
+def test_view_follows_the_model(parts, unit_cube):
+    bp, n, _ = parts
+    P, _, F = unit_cube
+    a = bp.add("inlet")
+    bp.assign_faces([0, 1], a)
+    actor = FaceSelectionActor()
+    actor.setPolyData(_triangle_polydata(P, F), np.zeros(n, dtype=np.int32))
+    renders, hover = [], []
+    view = PartitionView(bp, request_render=lambda: renders.append(1), set_hover_enabled=hover.append)
+    view.attach(actor)                             # takes over the existing assignments
+    actor_ids = lambda: vtk_to_numpy(actor.full_polydata.GetCellData().GetArray("PartitionIds"))
+    assert list(actor_ids()[:3]) == [a, a, UNASSIGNED]
+    assert actor.lut.GetTableValue(a)[:3] == pytest.approx(bp.all()[0].color, abs=1 / 255)
+
+    bp.assign_faces([2], a)
+    assert actor_ids()[2] == a and renders
+    bp.set_current(a)
+    assert hover[-1] is True
+    view.preview_faces([5, 6])
+    assert actor.preview_actor.GetVisibility()
+    bp.delete(a)                                   # current gone: no hover, no preview
+    assert hover[-1] is False and not actor.preview_actor.GetVisibility()
+    assert not np.any(actor_ids())
+    view.detach()
+    bp.assign_faces([3], bp.add("wall"))           # detached: actor untouched
+    assert not np.any(actor_ids())
 
 
 def test_undo_redo_assignments(parts):
@@ -115,7 +144,7 @@ def test_undo_limit_and_unrecorded_edits(parts):
 
 def test_restore_takes_ids_and_colors_verbatim(parts):
     bp, n, *_ = parts
-    from pvp.geometry.Partition import Partition
+    from pvp.model.partitions import Partition
     ids = np.zeros(n, dtype=np.int32)
     ids[:4] = 7
     bp.restore([Partition(7, "outlet", (0.3, 0.4, 0.5))], ids, next_id=8, current=7)

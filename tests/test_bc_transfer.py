@@ -1,57 +1,16 @@
-"""PreProcCtrl: carry boundary assignments across the tet-mesher step.
+"""Carry boundary assignments across the tet-mesher step.
 
-The core guarantee tested here: after `replace_project_with_mesh` with a
-`bc_transfer` snapshot of a pre-meshing surface, every new-surface triangle
-is assigned to the partition that owned the closest cell of the old
-surface. Partitions are recreated with the original names.
+The core guarantee tested here: after take_mesh_result with a snapshot of
+the pre-meshing surface, every new-surface triangle is assigned to the
+partition that owned the closest cell of the old surface. Partitions are
+recreated with the original names.
 """
 import numpy as np
-import pytest
 
-from pvp.controllers.PreProcCtrl import PreProcCtrl
-
-
-class _FakePartitions:
-    """Just enough of BoundaryPartitions for the transfer path:
-    add(name)->new id, assign_faces(ids, pid), all(), ids_per_cell()."""
-
-    def __init__(self):
-        self._next = 1
-        self._names: dict[int, str] = {}
-        self._ids_per_cell: np.ndarray | None = None
-        self.on_changed = None
-
-    # BC-transfer path
-    def add(self, name: str, record: bool = True) -> int:
-        pid = self._next
-        self._next += 1
-        self._names[pid] = name
-        return pid
-
-    def assign_faces(self, face_ids, pid: int, record: bool = True):
-        if self._ids_per_cell is None:
-            return
-        self._ids_per_cell[list(face_ids)] = pid
-
-    # Introspection
-    def all(self):
-        from types import SimpleNamespace
-        return [SimpleNamespace(id=pid, name=n) for pid, n in sorted(self._names.items())]
-
-    def ids_per_cell(self):
-        return self._ids_per_cell
-
-
-class _FakeSceneCtrl:
-    def __init__(self):
-        self.partitions = _FakePartitions()
-
-    def add_surface_geometry(self, vertices, triangles):
-        self.partitions._ids_per_cell = np.zeros(len(triangles), dtype=np.int32)
-        return None
-
-    def add_volume_unstructured_mesh(self, *_): pass
-    def reset_view_toggles(self): pass
+from pvp.model.mesh import Mesh
+from pvp.model.project import Project
+from pvp.services.boundary_transfer import closest_cell_ids, snapshot_boundaries
+from pvp.services.project_ops import take_mesh_result
 
 
 def _two_triangle_square():
@@ -76,61 +35,48 @@ def _subdivided_square():
     return V, np.array(F0 + F1, dtype=np.int64)
 
 
-@pytest.fixture
-def preproc_with_cube(unit_cube):
-    P, T, F = unit_cube
-    scene = _FakeSceneCtrl()
-    c = PreProcCtrl()
-    c.set_controllers(scene, None)
-    c.replace_project_with_mesh(P, F, T, name="cube")
-    return c, scene
+def _project_with(V, F, labels: dict[str, list[int]]) -> Project:
+    p = Project()
+    p.start("before", Mesh(vertices=V, triangles=F))
+    for name, faces in labels.items():
+        p.partitions.assign_faces(faces, p.partitions.add(name))
+    return p
+
+
+def test_closest_cell_ids_maps_children_to_their_parent():
+    old_V, old_F = _two_triangle_square()
+    new_V, new_F = _subdivided_square()
+    ids = closest_cell_ids(old_V, old_F, np.array([5, 7]), new_V, new_F)
+    assert list(ids) == [5] * 4 + [7] * 4
 
 
 def test_transfer_assigns_each_new_triangle_to_the_right_old_label():
-    old_V, old_F = _two_triangle_square()
+    p = _project_with(*_two_triangle_square(), {"inlet": [0], "wall": [1]})
+    snap = snapshot_boundaries(p)
     new_V, new_F = _subdivided_square()
+    take_mesh_result(p, new_V, new_F, np.zeros((0, 4)), "meshed", snap)
 
-    scene = _FakeSceneCtrl()
-    c = PreProcCtrl()
-    c.set_controllers(scene, None)
-
-    snap = {
-        "vertices":     old_V,
-        "triangles":    old_F,
-        "ids_per_cell": np.array([1, 2], dtype=np.int32),   # tri0=inlet, tri1=wall
-        "names":        {1: "inlet", 2: "wall"},
-    }
-    T = np.zeros((0, 4), dtype=np.int64)
-    c.replace_project_with_mesh(new_V, new_F, T, name="meshed", bc_transfer=snap)
-
-    assigned = scene.partitions.ids_per_cell()
-    name_of = {p.id: p.name for p in scene.partitions.all()}
-
-    # Partitions recreated by name (ids may differ from the old 1/2 pair).
-    assert set(name_of.values()) == {"inlet", "wall"}
+    assigned = p.partitions.ids_per_cell()
+    name_of = {q.id: q.name for q in p.partitions.all()}
+    assert sorted(name_of.values()) == ["inlet", "wall"]
     inlet_id = next(pid for pid, n in name_of.items() if n == "inlet")
-    wall_id  = next(pid for pid, n in name_of.items() if n == "wall")
-
+    wall_id = next(pid for pid, n in name_of.items() if n == "wall")
     # First 4 new triangles came from tri0 (inlet), next 4 from tri1 (wall).
     assert list(assigned[:4]) == [inlet_id] * 4
-    assert list(assigned[4:]) == [wall_id]  * 4
+    assert list(assigned[4:]) == [wall_id] * 4
+    assert not p.partitions.undo()                 # the transfer is not an undo step
 
 
-def test_snapshot_returns_none_when_nothing_is_assigned(preproc_with_cube):
-    c, _ = preproc_with_cube
-    assert c.snapshot_boundary_assignments() is None
+def test_snapshot_is_none_without_assignments(unit_cube):
+    P, _, F = unit_cube
+    assert snapshot_boundaries(Project()) is None
+    assert snapshot_boundaries(_project_with(P, F, {})) is None
+    assert snapshot_boundaries(_project_with(P, F, {"inlet": []})) is None
 
 
 def test_no_transfer_keeps_partitions_empty():
-    old_V, old_F = _two_triangle_square()
+    p = _project_with(*_two_triangle_square(), {"inlet": [0]})
     new_V, new_F = _subdivided_square()
-
-    scene = _FakeSceneCtrl()
-    c = PreProcCtrl()
-    c.set_controllers(scene, None)
-
-    c.replace_project_with_mesh(new_V, new_F, np.zeros((0, 4), dtype=np.int64),
-                                name="meshed", bc_transfer=None)
-
-    assert scene.partitions.all() == []
-    assert np.all(scene.partitions.ids_per_cell() == 0)
+    take_mesh_result(p, new_V, new_F, np.zeros((0, 4)), "meshed", None)
+    assert p.partitions.all() == []
+    assert not np.any(p.partitions.ids_per_cell())

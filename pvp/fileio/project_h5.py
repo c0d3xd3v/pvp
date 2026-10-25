@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from pvp.geometry.Partition import Partition
+from pvp.model.partitions import Partition
 
 FORMAT = "pvp-project"
 FORMAT_VERSION = 1

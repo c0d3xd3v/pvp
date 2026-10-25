@@ -8,7 +8,8 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from pvp.visualization.vtk.ResultActor import ResultActor
 from pvp.visualization.vtk.FaceSelectionActor import FaceSelectionActor
-from pvp.visualization.vtk.BoundaryPartitions import BoundaryPartitions
+from pvp.visualization.vtk.PartitionView import PartitionView
+from pvp.model.partitions import Partitions
 from pvp.visualization.vtk.ClipPlane import ClipPlane
 from pvp.visualization.vtk.scene_lock import scene_locked
 
@@ -30,11 +31,11 @@ class SceneCtrl(QObject):
     """Owns the VTK actors of the scene (surface, volume/background roles,
     result) and decides which of them the clip plane applies to.
 
-    Boundary-condition partitions live in `self.partitions`, the clip plane
-    and its widget in `self.__clip`.
+    The boundary partitions are shown through `self.__partition_view`, the
+    clip plane and its widget live in `self.__clip`.
     """
 
-    def __init__(self):
+    def __init__(self, partitions: Partitions):
         super().__init__()
         self.__vtkitem = None
         self.__polydata = None
@@ -45,7 +46,8 @@ class SceneCtrl(QObject):
         self.__volume_clip_filter = None
         self.__clip = ClipPlane()
         self.__wireframe = False
-        self.partitions = BoundaryPartitions(
+        self.__partition_view = PartitionView(
+            partitions,
             request_render=self.__render,
             set_hover_enabled=self.__set_hover_enabled,
         )
@@ -111,10 +113,9 @@ class SceneCtrl(QObject):
             self.__remove_all_actors()
             self.__result_actor = None
             self.__actor = FaceSelectionActor()
-            # All cells start as unassigned (partition id 0)
             self.__actor.setPolyData(self.__polydata,
                                      np.zeros(self.__polydata.GetNumberOfCells(), dtype=np.int32))
-            self.partitions.attach(self.__actor)
+            self.__partition_view.attach(self.__actor)     # pushes the model's ids and colors
             if self.__clip.enabled:
                 self.__actor.mapper.AddClippingPlane(self.__clip.plane)
             if self.__wireframe:
@@ -196,17 +197,11 @@ class SceneCtrl(QObject):
         if self.__clip.enabled:
             self.__clip.set_enabled(False)
 
-    def interactive_select(self, face_ids, partition_id):
-        self.partitions.assign_faces(face_ids, partition_id)
+    def preview_faces(self, face_ids):
+        self.__partition_view.preview_faces(face_ids)
 
-    def interactive_deselect(self, face_ids):
-        self.partitions.clear_faces(face_ids)
-
-    def interactive_preview(self, face_ids):
-        self.partitions.preview_faces(face_ids)
-
-    def interactive_clear_preview(self):
-        self.partitions.clear_preview()
+    def clear_preview(self):
+        self.__partition_view.clear_preview()
 
     @Slot(bool)
     @scene_locked
@@ -226,7 +221,7 @@ class SceneCtrl(QObject):
         if self.__vtkitem and self.__vtkitem.renderer and self.__polydata:
             self.__remove_all_actors()
             self.__actor = None
-            self.partitions.detach()
+            self.__partition_view.detach()
             self.__result_actor = ResultActor()
             self.__result_actor.setDataset(self.__polydata)
             if self.__clip.enabled:

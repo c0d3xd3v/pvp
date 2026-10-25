@@ -1,425 +1,154 @@
-from pathlib import Path
-
-import numpy as np
-from pvp.visualization.vtk import vtklib as vtk
-from vtkmodules.util.numpy_support import numpy_to_vtk
-
 from PySide6.QtCore import Slot, Signal, QObject, QUrl
 
-from pvp.geometry.PreProcSession import PreProcSession, PreProcMesh
-from pvp.geometry.MeshRole import MeshRole
-from pvp.model.mesh import Mesh
-from pvp.fileio.readers import read_surface, read_volume
 from pvp.fileio.formats import EXPORT_FORMATS
-from pvp.fileio.export_model import ExportMesh, BCGroup
-from pvp.fileio import project_h5
+from pvp.model.project import Project
+from pvp.services import export, project_ops
+from pvp.services.boundary_transfer import BoundarySnapshot
+
+
+def _local_path(path: str) -> str:
+    # QML passes file URLs ("file:///...") from its dialogs
+    return QUrl(path).toLocalFile() if path.startswith("file:") else path
 
 
 class PreProcCtrl(QObject):
+    """QML-facing side of the pre-processing project: runs the project
+    operations and shows the result in the scene."""
     sessionChanged = Signal()
     partitionsChanged = Signal()
 
-    def __init__(self):
+    def __init__(self, project: Project, scene_ctrl, selection_ctrl):
         super().__init__()
-        self.__session = PreProcSession()
-        self.__scene_ctrl = None
-        self.__selection_ctrl = None
-
-    def set_controllers(self, scene_ctrl, selection_ctrl):
+        self.__project = project
         self.__scene_ctrl = scene_ctrl
         self.__selection_ctrl = selection_ctrl
-        self.__scene_ctrl.partitions.on_changed = self.partitionsChanged.emit
+        project.partitions.subscribe(self.__on_partitions_changed)
 
-    def get_session(self) -> PreProcSession:
-        return self.__session
+    def __on_partitions_changed(self, _ids_changed: bool, list_changed: bool):
+        if list_changed:
+            self.partitionsChanged.emit()
 
-    def __start_new_project(self, source_path: str):
-        """A freshly loaded geometry invalidates everything derived from the
-        previous one (volume, background, mesher parameters in mm)."""
-        for role in MeshRole:
-            self.__session.clear(role)
-        self.__session.set_source(source_path)
-        self.__session.mesher_name = ""
-        self.__session.mesher_params = {}
+    def __show_project(self, reset_view: bool = True):
+        """Rebuild the scene from the project. reset_view: a new file was
+        opened (QML recreates its view toggles then)."""
+        p = self.__project
+        if reset_view:
+            self.__scene_ctrl.reset_view_toggles()
+        self.__scene_ctrl.add_surface_geometry(p.surface.vertices, p.surface.triangles)
+        self.__selection_ctrl.set_picking_enabled(True)
+        self.__selection_ctrl.load_geometry(p.surface.vertices, p.surface.triangles)
+        if p.volume is not None:
+            if p.volume.has_tetrahedra:
+                self.__scene_ctrl.add_volume_unstructured_mesh(p.volume.vertices, p.volume.tetrahedra)
+            else:
+                self.__scene_ctrl.add_volume_geometry(p.volume.vertices, p.volume.triangles)
+        self.sessionChanged.emit()
+
+    # --- opening files / meshing result ------------------------------------
 
     @Slot(str, float)
     @Slot(str)
     def loadSurface(self, file_path: str, scale: float = 1.0):
-        data = read_surface(file_path, scale)
-        self.__start_new_project(file_path)
-        self.__session.set(PreProcMesh(
-            role=MeshRole.SURFACE,
-            data=data,
-            name=Path(file_path).name
-        ))
-        if self.__scene_ctrl:
-            self.__scene_ctrl.reset_view_toggles()
-            self.__scene_ctrl.add_surface_geometry(data.vertices, data.triangles)
-            if self.__selection_ctrl:
-                self.__selection_ctrl.set_picking_enabled(True)
-                self.__selection_ctrl.load_geometry(data.vertices, data.triangles)
-        self.sessionChanged.emit()
+        project_ops.open_surface(self.__project, file_path, scale)
+        self.__show_project()
 
     @Slot(str)
     def loadVolume(self, file_path: str):
-        data = read_volume(file_path)
+        project_ops.open_volume(self.__project, file_path)
+        self.__show_project()
 
-        # A .vol carries surface + volume + boundary info — treat as fresh project.
-        self.__start_new_project(file_path)
+    def loadProject(self, file_path: str) -> str:
+        """Replace the project with a .pvp file. Returns "" or an error message."""
+        try:
+            project_ops.open_project_file(self.__project, file_path)
+        except Exception as e:
+            print(f"loadProject failed: {e}")
+            return str(e)
+        self.__show_project()
+        print(f"Loaded project {file_path}")
+        return ""
 
-        name = Path(file_path).name
-        self.__session.set(PreProcMesh(role=MeshRole.VOLUME,  data=data, name=name))
-        self.__session.set(PreProcMesh(role=MeshRole.SURFACE, data=data, name=name))
-
-        if self.__scene_ctrl:
-            self.__scene_ctrl.reset_view_toggles()
-            # Build surface (also resets partitions, sets up FaceSelectionActor)
-            self.__scene_ctrl.add_surface_geometry(data.vertices, data.triangles)
-            if self.__selection_ctrl:
-                self.__selection_ctrl.set_picking_enabled(True)
-                self.__selection_ctrl.load_geometry(data.vertices, data.triangles)
-
-            # Build volume
-            if data.has_tetrahedra:
-                self.__scene_ctrl.add_volume_unstructured_mesh(
-                    data.vertices, data.tetrahedra
-                )
-            else:
-                self.__scene_ctrl.add_volume_geometry(
-                    data.vertices, data.triangles
-                )
-
-            # Populate partitions from BC info if the file carries any
-            self.__populate_partitions_from_bcs(data)
-
-        self.sessionChanged.emit()
-
-    def __populate_partitions_from_bcs(self, data):
-        if not data.bc_names or len(data.triangle_bcs) == 0:
-            return
-        # Skip empty and "default" names — the latter is our sentinel written by
-        # exportVolume for unassigned triangles. Treating it as unassigned again on
-        # load makes the round-trip idempotent (no duplicate "default" entries).
-        for bc_idx, bc_name in data.bc_names.items():
-            name = (bc_name or "").strip()
-            faces = np.flatnonzero(data.triangle_bcs == bc_idx)
-            if not name or name.lower() == "default" or faces.size == 0:
-                continue
-            pid = self.__scene_ctrl.partitions.add(name, record=False)
-            self.__scene_ctrl.partitions.assign_faces(faces, pid, record=False)
+    def take_mesh_result(self, result, boundaries: BoundarySnapshot | None):
+        """Called by MeshingCtrl when a mesher finished."""
+        project_ops.take_mesh_result(self.__project, result.vertices, result.triangles,
+                                     result.tetrahedra, "meshed", boundaries)
+        self.__show_project(reset_view=False)
 
     @Slot()
     def createBackgroundMesh(self):
-        surface = self.__session.surface
-        if surface is None:
+        if self.__project.surface is None:
             return
-        from pvp.geometry.bounding_box import bounding_box_mesh
-        box = bounding_box_mesh(surface.data.vertices)
-        self.__session.set(PreProcMesh(role=MeshRole.BACKGROUND, data=box, name="OBB"))
-        if self.__scene_ctrl:
-            self.__scene_ctrl.add_background_geometry(box)
+        project_ops.add_bounding_box(self.__project)
+        self.__scene_ctrl.add_background_geometry(self.__project.background)
         self.sessionChanged.emit()
-
-    def snapshot_boundary_assignments(self) -> dict | None:
-        """Capture the current surface + partition state so a subsequent call
-        to replace_project_with_mesh can port the boundary assignments onto
-        the new tet-mesher boundary. Returns None if there is nothing to
-        transfer (no surface, no named partitions, or every triangle
-        unassigned)."""
-        if self.__scene_ctrl is None:
-            return None
-        surface = self.__session.surface
-        if surface is None or surface.data is None:
-            return None
-        part_ids = self.__scene_ctrl.partitions.ids_per_cell()
-        if part_ids is None or not np.any(part_ids):
-            return None
-        names = {p.id: p.name for p in self.__scene_ctrl.partitions.all()}
-        if not names:
-            return None
-        return {
-            "vertices": np.asarray(surface.data.vertices, dtype=np.float64),
-            "triangles": np.asarray(surface.data.triangles, dtype=np.int64),
-            "ids_per_cell": np.asarray(part_ids, dtype=np.int32),
-            "names": names,
-        }
-
-    def replace_project_with_mesh(self, vertices, triangles, tetrahedra,
-                                  name: str, bc_transfer: dict | None = None):
-        """Called by MeshingCtrl after a mesher finishes. Takes the mesher's
-        output arrays and treats them as a complete new project — surface is
-        the tet boundary, volume is the tet set. When bc_transfer is given,
-        boundary assignments from before the meshing step are projected onto
-        the new surface via nearest-cell lookup against the pre-meshing
-        geometry (fTetWild emits a surface close to the input, so centroids
-        map reliably back to their original triangles)."""
-        data = Mesh(vertices=vertices, triangles=triangles, tetrahedra=tetrahedra)
-        V, tris = data.vertices, data.triangles
-
-        # Treat as fresh project
-        self.__session.clear(MeshRole.BACKGROUND)
-        self.__session.set(PreProcMesh(role=MeshRole.VOLUME,  data=data, name=name))
-        self.__session.set(PreProcMesh(role=MeshRole.SURFACE, data=data, name=name))
-
-        if self.__scene_ctrl:
-            # Rebuild surface actor; this also resets partitions via __prepare_rendering
-            self.__scene_ctrl.add_surface_geometry(V, tris)
-            if self.__selection_ctrl:
-                self.__selection_ctrl.set_picking_enabled(True)
-                self.__selection_ctrl.load_geometry(V, tris)
-            # Add volume
-            self.__scene_ctrl.add_volume_unstructured_mesh(vertices, tetrahedra)
-            if bc_transfer is not None:
-                self.__transfer_boundaries(bc_transfer, vertices, triangles)
-
-        self.sessionChanged.emit()
-
-    def __transfer_boundaries(self, snap: dict, new_vertices, new_triangles):
-        """Rebuild partitions on the new surface by nearest-cell projection
-        onto the pre-meshing surface."""
-        old_V = snap["vertices"]
-        old_F = snap["triangles"]
-        old_part_ids = snap["ids_per_cell"]
-        old_names = snap["names"]
-
-        # vtkPolyData for the old surface (cell locator target)
-        pts = vtk.vtkPoints()
-        pts.SetData(numpy_to_vtk(old_V, deep=True))
-        conn = np.column_stack(
-            (np.full(len(old_F), 3, dtype=np.int64), old_F)
-        ).ravel()
-        cells = vtk.vtkCellArray()
-        cells.SetCells(len(old_F), numpy_to_vtk(conn, deep=True,
-                                                array_type=vtk.VTK_ID_TYPE))
-        old_pd = vtk.vtkPolyData()
-        old_pd.SetPoints(pts)
-        old_pd.SetPolys(cells)
-
-        locator = vtk.vtkCellLocator()
-        locator.SetDataSet(old_pd)
-        locator.BuildLocator()
-
-        new_V = np.asarray(new_vertices, dtype=np.float64)
-        new_F = np.asarray(new_triangles, dtype=np.int64)
-        centroids = new_V[new_F].mean(axis=1)
-
-        closest = [0.0, 0.0, 0.0]
-        cell_id = vtk.reference(0)
-        sub_id = vtk.reference(0)
-        dist2 = vtk.reference(0.0)
-        new_part_ids = np.zeros(len(new_F), dtype=np.int32)
-        for i, c in enumerate(centroids):
-            locator.FindClosestPoint(c.tolist(), closest, cell_id, sub_id, dist2)
-            cid = int(cell_id)
-            if 0 <= cid < len(old_part_ids):
-                new_part_ids[i] = int(old_part_ids[cid])
-
-        # Recreate partitions by name (in original id order so colours stay stable)
-        id_map: dict[int, int] = {}
-        for old_pid in sorted(old_names.keys()):
-            id_map[old_pid] = self.__scene_ctrl.partitions.add(old_names[old_pid], record=False)
-
-        for old_pid, new_pid in id_map.items():
-            indices = np.where(new_part_ids == old_pid)[0]
-            if indices.size:
-                self.__scene_ctrl.partitions.assign_faces(indices, new_pid, record=False)
 
     # --- project file ------------------------------------------------------
 
     @Slot(result=bool)
     def canSaveProject(self) -> bool:
-        s = self.__session.surface
-        return s is not None and s.data is not None
+        return self.__project.surface is not None
 
     @Slot(str, result=str)
     def saveProject(self, file_path: str) -> str:
-        """Write the whole session to a .pvp file. Returns "" or an error message."""
-        if file_path.startswith("file:"):
-            file_path = QUrl(file_path).toLocalFile()
-        if not file_path.endswith(project_h5.EXTENSION):
-            file_path += project_h5.EXTENSION
-        if not self.canSaveProject() or self.__scene_ctrl is None:
+        """Write the whole project to a .pvp file. Returns "" or an error message."""
+        if not self.canSaveProject():
             return "Nothing to save: no geometry loaded."
-        s = self.__session
-        parts = self.__scene_ctrl.partitions
-        surf = s.surface.data
-        tris = np.asarray(surf.triangles, dtype=np.int64)
-        ids = parts.ids_per_cell()
-        state = project_h5.ProjectState(
-            surface_vertices=np.asarray(surf.vertices, dtype=np.float64),
-            surface_triangles=tris,
-            partition_ids=ids if ids is not None else np.zeros(len(tris), dtype=np.int32),
-            partitions=parts.all(),
-            next_partition_id=parts.next_id(),
-            current_partition=parts.current_id(),
-            normal_angle=self.__selection_ctrl.getNormalCompareAngle() if self.__selection_ctrl else 10.0,
-            source_name=s.source_name,
-            source_bytes=s.source_bytes,
-            mesher_name=s.mesher_name,
-            mesher_params=dict(s.mesher_params),
-        )
-        if s.volume is not None and s.volume.data is not None and s.volume.data.has_tetrahedra:
-            vol = s.volume.data
-            state.volume_vertices = np.asarray(vol.vertices, dtype=np.float64)
-            state.volume_triangles = np.asarray(vol.triangles, dtype=np.int64)
-            state.volume_tetrahedra = np.asarray(vol.tetrahedra, dtype=np.int64)
         try:
-            project_h5.save_project(file_path, state)
+            file_path = project_ops.save_project_file(self.__project, _local_path(file_path))
         except Exception as e:
             print(f"saveProject failed: {e}")
             return str(e)
         print(f"Saved project {file_path}")
         return ""
 
-    def loadProject(self, file_path: str) -> str:
-        """Replace the session with a .pvp file. Returns "" or an error message."""
-        try:
-            state = project_h5.load_project(file_path)
-        except Exception as e:
-            print(f"loadProject failed: {e}")
-            return str(e)
-
-        for role in MeshRole:
-            self.__session.clear(role)
-        name = Path(file_path).stem
-        surface = Mesh(vertices=state.surface_vertices, triangles=state.surface_triangles)
-        if state.has_volume:
-            volume = Mesh(vertices=state.volume_vertices, triangles=state.volume_triangles,
-                          tetrahedra=state.volume_tetrahedra)
-            if (np.array_equal(state.volume_vertices, state.surface_vertices)
-                    and np.array_equal(state.volume_triangles, state.surface_triangles)):
-                surface = volume    # as after meshing / loading a .vol: one shared mesh
-            self.__session.set(PreProcMesh(role=MeshRole.VOLUME, data=volume, name=name))
-        self.__session.set(PreProcMesh(role=MeshRole.SURFACE, data=surface, name=name))
-        self.__session.source_name = state.source_name
-        self.__session.source_bytes = state.source_bytes
-        self.__session.mesher_name = state.mesher_name
-        self.__session.mesher_params = dict(state.mesher_params)
-
-        if self.__scene_ctrl:
-            self.__scene_ctrl.reset_view_toggles()
-            self.__scene_ctrl.add_surface_geometry(surface.vertices, surface.triangles)
-            if self.__selection_ctrl:
-                self.__selection_ctrl.set_picking_enabled(True)
-                self.__selection_ctrl.set_normal_compare_angle(state.normal_angle)
-                self.__selection_ctrl.load_geometry(surface.vertices, surface.triangles)
-            if state.has_volume:
-                self.__scene_ctrl.add_volume_unstructured_mesh(state.volume_vertices,
-                                                               state.volume_tetrahedra)
-            self.__scene_ctrl.partitions.restore(state.partitions, state.partition_ids,
-                                                 state.next_partition_id,
-                                                 state.current_partition)
-        self.sessionChanged.emit()
-        print(f"Loaded project {file_path}")
-        return ""
-
-    # --- undo / redo of boundary edits --------------------------------------
+    # --- partitions --------------------------------------------------------
 
     @Slot()
     def undo(self):
-        if self.__scene_ctrl:
-            self.__scene_ctrl.partitions.undo()
+        self.__project.partitions.undo()
 
     @Slot()
     def redo(self):
-        if self.__scene_ctrl:
-            self.__scene_ctrl.partitions.redo()
+        self.__project.partitions.redo()
 
     @Slot(bool)
     def setPickingEnabled(self, enabled: bool):
-        if self.__selection_ctrl:
-            self.__selection_ctrl.set_picking_enabled(enabled)
+        self.__selection_ctrl.set_picking_enabled(enabled)
 
     @Slot(str, result=int)
     def createPartition(self, name: str) -> int:
-        if not self.__scene_ctrl or not name.strip():
+        if self.__project.surface is None or not name.strip():
             return -1
-        return self.__scene_ctrl.partitions.add(name.strip())
+        return self.__project.partitions.add(name.strip())
 
     @Slot(int)
     def deletePartition(self, pid: int):
-        if self.__scene_ctrl:
-            self.__scene_ctrl.partitions.delete(pid)
+        self.__project.partitions.delete(pid)
 
     @Slot(int)
     def selectPartition(self, pid: int):
-        if self.__scene_ctrl:
-            self.__scene_ctrl.partitions.set_current(pid if pid > 0 else None)
+        self.__project.partitions.set_current(pid if pid > 0 else None)
 
     @Slot(result='QVariantList')
     def getPartitions(self) -> list:
-        if not self.__scene_ctrl:
-            return []
-        current = self.__scene_ctrl.partitions.current_id()
-        result = []
-        for p in self.__scene_ctrl.partitions.all():
-            r, g, b = p.color
-            hex_color = "#{:02x}{:02x}{:02x}".format(int(r*255), int(g*255), int(b*255))
-            result.append({
-                "id": p.id,
-                "name": p.name,
-                "color": hex_color,
-                "selected": p.id == current,
-            })
-        return result
+        parts = self.__project.partitions
+        current = parts.current_id()
+        return [{
+            "id": p.id,
+            "name": p.name,
+            "color": "#{:02x}{:02x}{:02x}".format(*(int(c * 255) for c in p.color)),
+            "selected": p.id == current,
+        } for p in parts.all()]
+
+    # --- export ------------------------------------------------------------
 
     @Slot(result=bool)
     def canExportVolume(self) -> bool:
-        vol_mesh = self.__session.volume
-        if vol_mesh is None or vol_mesh.data is None:
-            return False
-        return vol_mesh.data.has_tetrahedra and len(vol_mesh.data.triangles) > 0
-
-    def __collect_bc_groups(self, n_triangles: int) -> list[BCGroup]:
-        """Map the current partitions to triangle groups via the FaceSelectionActor's
-        PartitionIds cell array (the source of truth for who owns what). Every
-        triangle must end up in some group, otherwise the exported surface has
-        holes; unassigned triangles go into a "default" group."""
-        part_ids = self.__scene_ctrl.partitions.ids_per_cell() if self.__scene_ctrl else None
-        if part_ids is None:
-            return [BCGroup("default", np.arange(n_triangles, dtype=np.int64))]
-        if part_ids.shape[0] != n_triangles:
-            raise ValueError(f"surface has {part_ids.shape[0]} triangles but the volume mesh "
-                             f"boundary has {n_triangles}; they must be the same surface")
-
-        groups = []
-        assigned = np.zeros(n_triangles, dtype=bool)
-        for p in self.__scene_ctrl.partitions.all():
-            indices = np.where(part_ids == p.id)[0]
-            if indices.size:
-                groups.append(BCGroup(p.name, indices.astype(np.int64)))
-                assigned[indices] = True
-        unassigned = np.where(~assigned)[0]
-        if unassigned.size:
-            groups.append(BCGroup("default", unassigned.astype(np.int64)))
-        return groups
-
-    def __build_export_mesh(self) -> ExportMesh:
-        data = self.__session.volume.data
-        tris = data.triangles
-        groups = self.__collect_bc_groups(len(tris))
-        return ExportMesh(
-            nodes=data.vertices,
-            tets=data.tetrahedra,
-            surface_tri=tris,
-            bc_groups=groups,
-        )
+        return self.__project.can_export_volume()
 
     @Slot(result='QVariantMap')
     def getExportSummary(self) -> dict:
-        """Numbers shown in the export dialog."""
-        vol_mesh = self.__session.volume
-        if not self.canExportVolume():
-            return {"boundaries": 0, "unassigned": 0, "tets": 0}
-        data = vol_mesh.data
-        try:
-            groups = self.__collect_bc_groups(len(data.triangles))
-        except ValueError:
-            groups = []
-        named = [g for g in groups if g.name != "default"]
-        unassigned = sum(len(g.triangles) for g in groups if g.name == "default")
-        return {"boundaries": len(named), "unassigned": unassigned,
-                "tets": len(data.tetrahedra)}
+        return export.export_summary(self.__project)
 
     @Slot(result='QVariantList')
     def getExportFormats(self) -> list:
@@ -433,42 +162,20 @@ class PreProcCtrl(QObject):
                      quadratic: bool = False) -> str:
         """Write the volume mesh incl. boundary-condition labels in the chosen
         format. Returns "" on success, otherwise an error message for the UI."""
-        fmt = EXPORT_FORMATS.get(format_key)
-        if fmt is None:
-            return f"Unknown export format: {format_key!r}"
-
-        # QML passes a QUrl-like string (e.g. "file:///...") from the FileDialog
-        if file_path.startswith('file:'):
-            file_path = QUrl(file_path).toLocalFile()
-        if not file_path.endswith(fmt.ext):
-            file_path += fmt.ext
-        if not self.canExportVolume():
-            return "No volume mesh to export."
-
         try:
-            mesh = self.__build_export_mesh()
-            if fmt.quadratic:
-                fmt.writer(file_path, mesh, quadratic=bool(quadratic))
-            else:
-                fmt.writer(file_path, mesh)
+            path, mesh = export.export_volume(self.__project, _local_path(file_path),
+                                              format_key, quadratic)
         except Exception as e:
             print(f"exportVolume failed: {e}")
             return str(e)
-        print(f"Exported {file_path} ({format_key}, quadratic={quadratic}): "
+        print(f"Exported {path} ({format_key}, quadratic={quadratic}): "
               + ", ".join(f"{g.name} ({len(g.triangles)})" for g in mesh.bc_groups))
         return ""
 
     @Slot(result='QVariantList')
     def getMeshRoles(self) -> list:
-        result = []
-        for role, mesh in [
-            ("surface",    self.__session.surface),
-            ("volume",     self.__session.volume),
-            ("background", self.__session.background),
-        ]:
-            result.append({
-                "role": role,
-                "name": mesh.name if mesh and mesh.data else "",
-                "loaded": bool(mesh and mesh.data),
-            })
-        return result
+        p = self.__project
+        return [{"role": role, "name": name if mesh is not None else "", "loaded": mesh is not None}
+                for role, mesh, name in [("surface", p.surface, p.name),
+                                         ("volume", p.volume, p.name),
+                                         ("background", p.background, "OBB")]]

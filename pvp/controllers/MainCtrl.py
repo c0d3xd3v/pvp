@@ -13,31 +13,22 @@ from pvp.controllers.PreProcCtrl import PreProcCtrl
 from pvp.controllers.ResultCtrl import ResultCtrl
 from pvp.controllers.MeshingCtrl import MeshingCtrl
 from pvp.fileio.readers import read_result
+from pvp.model.project import Project
 from pvp.fileio.formats import file_kind
 from pvp.visualization.qtquick.VTKItem import VTKItem
-
-
 
 class MainCtrl(QObject):
     meshLoaded = Signal(str)
 
     def __init__(self):
         super().__init__()
-        self.__selection_ctrl = SelectionCtrl()
-        self.__scene_ctrl     = SceneCtrl()
-        self.__preproc_ctrl    = PreProcCtrl()
-        self.__result_ctrl    = ResultCtrl()
-        self.__meshing_ctrl   = MeshingCtrl()
+        self.__project        = Project()
+        self.__scene_ctrl     = SceneCtrl(self.__project.partitions)
+        self.__selection_ctrl = SelectionCtrl(self.__project, self.__scene_ctrl)
+        self.__preproc_ctrl   = PreProcCtrl(self.__project, self.__scene_ctrl, self.__selection_ctrl)
+        self.__result_ctrl    = ResultCtrl(self.__scene_ctrl)
+        self.__meshing_ctrl   = MeshingCtrl(self.__project, self.__preproc_ctrl)
         self.__startup_file: str | None = None
-
-        self.__preproc_ctrl.set_controllers(self.__scene_ctrl, self.__selection_ctrl)
-        self.__result_ctrl.set_scene_ctrl(self.__scene_ctrl)
-        self.__selection_ctrl.set_scene_ctrl(self.__scene_ctrl)
-        self.__meshing_ctrl.set_controllers(self.__preproc_ctrl, self.__scene_ctrl)
-        self.__selection_ctrl.update_partition.connect(self.__scene_ctrl.interactive_select)
-        self.__selection_ctrl.clear_partition.connect(self.__scene_ctrl.interactive_deselect)
-        self.__selection_ctrl.preview_partition.connect(self.__scene_ctrl.interactive_preview)
-        self.__selection_ctrl.clear_preview.connect(self.__scene_ctrl.interactive_clear_preview)
 
     def set_cmd_args(self, args):
         # Loading needs the VTK renderer, which only exists after the first frame;

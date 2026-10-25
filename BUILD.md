@@ -92,14 +92,15 @@ built.
 | Path | Contents |
 |---|---|
 | `pvp.py` | Entry point |
-| `pvp/controllers/` | Controllers exposed to QML (`MainCtrl` wires them; `PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
+| `pvp/controllers/` | Thin QML-facing controllers (`MainCtrl` creates the project and wires them; `PreProcCtrl`, `MeshingCtrl`, `SceneCtrl`, ...) |
 | `qml/` | User interface (Qt Quick) |
-| `pvp/visualization/vtk/` | VTK actors, boundary partitions, clip plane, mouse interaction |
+| `pvp/visualization/vtk/` | VTK actors, `PartitionView` (shows the partitions), clip plane, mouse interaction |
 | `pvp/visualization/qtquick/` | `VTKItem`: VTK rendering inside Qt Quick |
 | `pvp/meshing/` | Mesher interface (`TetMesher.py`) and fTetWild implementation |
 | `pvp/fileio/` | `readers.py`, the writers, the project file; `formats.py` maps extensions and lists the export formats |
-| `pvp/model/` | Data model without Qt/VTK: `Mesh`/`ResultMesh` (NumPy arrays) |
-| `pvp/geometry/` | Pre-processing session, face regions, bounding box |
+| `pvp/model/` | Data model without Qt/VTK: `Project`, `Partitions` (boundary assignment + undo), `Mesh`/`ResultMesh` |
+| `pvp/services/` | Project operations without Qt: open/save, mesher result + boundary transfer, export |
+| `pvp/geometry/` | Face regions for selection, bounding box |
 | `resources/` | Qt resources: icons, colormaps (`resources.qrc`) |
 | `tests/` | pytest suite |
 | `external/fTetWild` | fTetWild (git submodule) |

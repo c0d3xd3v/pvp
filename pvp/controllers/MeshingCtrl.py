@@ -5,6 +5,8 @@ import numpy as np
 from PySide6.QtCore import Slot, Signal, QObject, QThread
 
 from pvp.meshing.FTetWildMesher import FTetWildMesher, MeshingCancelled
+from pvp.model.project import Project
+from pvp.services.boundary_transfer import BoundarySnapshot, snapshot_boundaries
 
 
 class _MeshingWorker(QObject):
@@ -43,18 +45,14 @@ class MeshingCtrl(QObject):
     # optimization), v_num, t_num (-1 outside optimization)
     progressChanged = Signal(str, float, float, int, int)
 
-    def __init__(self):
+    def __init__(self, project: Project, preproc_ctrl):
         super().__init__()
         self.__meshers = {m.name: m for m in [FTetWildMesher()]}
-        self.__preproc_ctrl = None
-        self.__scene_ctrl = None
+        self.__project = project
+        self.__preproc_ctrl = preproc_ctrl
         self.__thread: QThread | None = None
         self.__worker: _MeshingWorker | None = None
-        self.__bc_snapshot: dict | None = None
-
-    def set_controllers(self, preproc_ctrl, scene_ctrl):
-        self.__preproc_ctrl = preproc_ctrl
-        self.__scene_ctrl = scene_ctrl
+        self.__bc_snapshot: BoundarySnapshot | None = None
 
     @Slot(result='QVariantList')
     def getMeshers(self) -> list:
@@ -65,11 +63,12 @@ class MeshingCtrl(QObject):
         m = self.__meshers.get(mesher_name)
         if not m:
             return []
-        bbox_diag = self.__current_bbox_diagonal()
+        project = self.__project
+        # Absolute-unit parameters get defaults relative to the model size
+        bbox_diag = project.surface.bbox_diagonal() if project.surface is not None else 0.0
         # Prefill with the parameters of the last run on this geometry (also
         # restored from a project file), else the mesher's defaults.
-        session = self.__preproc_ctrl.get_session() if self.__preproc_ctrl else None
-        last = session.mesher_params if session and session.mesher_name == mesher_name else {}
+        last = project.mesher_params if project.mesher_name == mesher_name else {}
         return [{
             "name":    p.name,
             "label":   p.label,
@@ -78,21 +77,7 @@ class MeshingCtrl(QObject):
             "max":     p.max_value,
             "step":    p.step,
             "tooltip": p.tooltip,
-        } for p in m.param_schema(bbox_diag)]
-
-    def __current_bbox_diagonal(self) -> float | None:
-        """Diagonal of the bbox of the currently loaded surface, in model
-        units — mesher schema uses it to compute sensible defaults for
-        absolute-unit parameters."""
-        if self.__preproc_ctrl is None:
-            return None
-        surf = self.__preproc_ctrl.get_session().surface
-        if surf is None or surf.data is None:
-            return None
-        V = np.asarray(surf.data.vertices, dtype=np.float64)
-        if V.size == 0:
-            return None
-        return float(np.linalg.norm(V.max(axis=0) - V.min(axis=0)))
+        } for p in m.param_schema(bbox_diag or None)]
 
     @Slot(str, 'QVariantMap', result=bool)
     def runMesher(self, mesher_name: str, params) -> bool:
@@ -101,20 +86,19 @@ class MeshingCtrl(QObject):
             return False
 
         m = self.__meshers.get(mesher_name)
-        if m is None or self.__preproc_ctrl is None or self.__scene_ctrl is None:
+        if m is None:
             return False
-        surface = self.__preproc_ctrl.get_session().surface
-        if surface is None or surface.data is None:
+        surface = self.__project.surface
+        if surface is None:
             print("Meshing: no surface loaded")
             return False
 
-        V = np.array(surface.data.vertices, dtype=np.float64)
-        F = np.array(surface.data.triangles, dtype=np.int32)
+        V = surface.vertices
+        F = surface.triangles.astype(np.int32)
         param_dict = {k: float(v) for k, v in dict(params).items()}
         print(f"Meshing: {mesher_name} params={param_dict}")
-        session = self.__preproc_ctrl.get_session()
-        session.mesher_name = mesher_name
-        session.mesher_params = dict(param_dict)
+        self.__project.mesher_name = mesher_name
+        self.__project.mesher_params = dict(param_dict)
 
         self.__thread = QThread()
         self.__worker = _MeshingWorker(m, V, F, param_dict)
@@ -132,7 +116,7 @@ class MeshingCtrl(QObject):
 
         # Snapshot boundary assignments on the current surface so the new
         # tet-mesher boundary can inherit them in __on_worker_finished.
-        self.__bc_snapshot = self.__preproc_ctrl.snapshot_boundary_assignments()
+        self.__bc_snapshot = snapshot_boundaries(self.__project)
 
         self.meshingStarted.emit()
         self.__thread.start()
@@ -143,14 +127,7 @@ class MeshingCtrl(QObject):
         # Runs on GUI thread (worker.finished → auto-queued).
         if success and result is not None:
             # Replace project: surface = tet boundary, volume = tet set.
-            # PreProcCtrl handles session + scene + selection consistently.
-            self.__preproc_ctrl.replace_project_with_mesh(
-                result.vertices,
-                result.triangles,
-                result.tetrahedra,
-                name="meshed",
-                bc_transfer=self.__bc_snapshot,
-            )
+            self.__preproc_ctrl.take_mesh_result(result, self.__bc_snapshot)
         self.__bc_snapshot = None
         self.meshingFinished.emit(success)
         # No explicit cleanup — Qt handles it via the deleteLater chain above.

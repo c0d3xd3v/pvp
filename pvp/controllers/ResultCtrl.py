@@ -7,14 +7,11 @@ def _natural_sort_key(s):
 
 
 class ResultCtrl(QObject):
-    def __init__(self):
+    def __init__(self, scene_ctrl):
         super().__init__()
         self.__result_data = None
-        self.__scene_ctrl = None
-        self.__current_field_name = None
-
-    def set_scene_ctrl(self, scene_ctrl):
         self.__scene_ctrl = scene_ctrl
+        self.__current_field_name = None
 
     def load_result(self, data):
         self.__result_data = data
@@ -33,8 +30,7 @@ class ResultCtrl(QObject):
     @Slot(str)
     def selectFunctionByName(self, name):
         self.__current_field_name = name
-        if self.__scene_ctrl is not None:
-            self.__scene_ctrl.select_function(name)
+        self.__scene_ctrl.select_function(name)
 
     @Slot(result=bool)
     def isCurrentFieldVectorValued(self):
@@ -47,10 +43,8 @@ class ResultCtrl(QObject):
 
     @Slot(bool, float)
     def apply_vector_field_on_position(self, should_apply, scale):
-        if self.__scene_ctrl is not None:
-            self.__scene_ctrl.apply_vector_field_on_position(should_apply, scale)
+        self.__scene_ctrl.apply_vector_field_on_position(should_apply, scale)
 
     @Slot(float)
     def setAnimationTime(self, t):
-        if self.__scene_ctrl is not None:
-            self.__scene_ctrl.set_animation_time(t)
+        self.__scene_ctrl.set_animation_time(t)

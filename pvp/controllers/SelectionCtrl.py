@@ -1,46 +1,39 @@
-
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Slot
 from PySide6.QtCore import QObject
 
 from pvp.geometry.TriangleMeshGraph import TriangleMeshGraph
+from pvp.model.project import Project
 
 
 class SelectionCtrl(QObject):
-    update_partition = Signal(list, int)
-    clear_partition = Signal(list)
-    preview_partition = Signal(list)
-    clear_preview = Signal()
+    """Turns clicks/hovers on surface cells into face regions: a left click
+    paints the region into the current partition, a right click clears it,
+    hovering previews it."""
 
-    _DEFAULT_NORMAL_ANGLE = 10.0
-
-    def __init__(self):
+    def __init__(self, project: Project, scene_ctrl):
         super().__init__()
-        self.__surfaceTriangleMeshGraph = None
+        self.__project = project
+        self.__scene_ctrl = scene_ctrl
+        self.__graph = None
         self.__picking_enabled = True
-        self.__scene_ctrl = None
-        self.__normal_angle = self._DEFAULT_NORMAL_ANGLE
         self.__hover_cell = -1
         self.__hover_label = -1
-
-    def set_scene_ctrl(self, scene_ctrl):
-        self.__scene_ctrl = scene_ctrl
 
     def set_picking_enabled(self, enabled: bool):
         self.__picking_enabled = enabled
         if not enabled:
             self.__forget_hover()
-            self.clear_preview.emit()
+            self.__scene_ctrl.clear_preview()
 
     def load_geometry(self, vertices, triangles):
-        self.__surfaceTriangleMeshGraph = TriangleMeshGraph(vertices, triangles, self.__normal_angle)
+        self.__graph = TriangleMeshGraph(vertices, triangles, self.__project.normal_angle)
         self.__forget_hover()
-        self.clear_preview.emit()
 
     @Slot(float)
     def set_normal_compare_angle(self, angle):
-        self.__normal_angle = float(angle)
-        if self.__surfaceTriangleMeshGraph is not None:
-            self.__surfaceTriangleMeshGraph.set_normal_compare_angle(self.__normal_angle)
+        self.__project.normal_angle = float(angle)
+        if self.__graph is not None:
+            self.__graph.set_normal_compare_angle(self.__project.normal_angle)
         self.__forget_hover()   # the region under the cursor depends on the angle
 
     def __forget_hover(self):
@@ -49,22 +42,21 @@ class SelectionCtrl(QObject):
 
     @Slot(result=float)
     def getNormalCompareAngle(self) -> float:
-        return self.__normal_angle
+        return self.__project.normal_angle
+
+    def __active(self) -> bool:
+        return self.__picking_enabled and self.__graph is not None
 
     def face_selected(self, face_id):
-        if not self.__picking_enabled:
-            return
-        pid = self.__scene_ctrl.partitions.current_id() if self.__scene_ctrl else None
-        if pid is None or self.__surfaceTriangleMeshGraph is None:
-            return
-        self.update_partition.emit(self.__surfaceTriangleMeshGraph.region(face_id).tolist(), pid)
+        pid = self.__project.partitions.current_id()
+        if self.__active() and pid is not None:
+            self.__project.partitions.assign_faces(self.__graph.region(face_id), pid)
 
     def face_deselected(self, face_id):
         """Right-click: clear the picked region from whatever partition it
         currently belongs to. Independent of which partition is selected."""
-        if not self.__picking_enabled or self.__surfaceTriangleMeshGraph is None:
-            return
-        self.clear_partition.emit(self.__surfaceTriangleMeshGraph.region(face_id).tolist())
+        if self.__active():
+            self.__project.partitions.clear_faces(self.__graph.region(face_id))
 
     def face_hovered(self, face_id):
         """Cursor moved onto another surface cell (-1: left the surface).
@@ -72,14 +64,12 @@ class SelectionCtrl(QObject):
         if face_id == self.__hover_cell:
             return
         self.__hover_cell = face_id
-        if (face_id < 0
-                or not self.__picking_enabled
-                or self.__surfaceTriangleMeshGraph is None):
+        if face_id < 0 or not self.__active():
             self.__hover_label = -1
-            self.clear_preview.emit()
+            self.__scene_ctrl.clear_preview()
             return
-        label = self.__surfaceTriangleMeshGraph.region_label(face_id)
+        label = self.__graph.region_label(face_id)
         if label == self.__hover_label:
             return
         self.__hover_label = label
-        self.preview_partition.emit(self.__surfaceTriangleMeshGraph.region(face_id).tolist())
+        self.__scene_ctrl.preview_faces(self.__graph.region(face_id))

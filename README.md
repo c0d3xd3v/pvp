@@ -1,13 +1,15 @@
 # pvp
 
-**pre / view / post** — a viewer for pre- and post-processing in numerical
-computational tasks (CFD/FEM).
+**pre / view / post** — a viewer for pre- and post-processing of FEM
+simulations (structural mechanics and dynamics).
 
-- Load surface meshes (`.stl`, `.obj`), volume meshes (`.vol`) and results (`.vtk`)
+- Load surface meshes (`.stl`, `.obj`), volume meshes (`.vol`, `.msh`) and results (`.vtk`)
 - Tetrahedral meshing of surfaces with [fTetWild](https://github.com/wildmeshing/fTetWild)
-- Define boundary conditions by selecting surface faces
+- Define boundary conditions by clicking surface faces, with a hover preview
+  and undo/redo
 - Export the volume mesh with boundary-condition labels (Netgen `.vol`,
   Gmsh `.msh`, CalculiX/Abaqus `.inp`, optionally with Tet10 elements)
+- Save everything as a single project file (`.pvp`)
 - Result visualisation (scalar fields, displacement animation)
 
 Built with Python, PySide6 (Qt Quick, Material Dark style) and VTK.
@@ -32,19 +34,26 @@ uses the system's C++ runtime and graphics drivers) and runs through X11
    the window. STL/OBJ files prompt for the unit convention so the geometry
    lands in millimetres regardless of the source file.
 2. **Meshing** tab — pick the mesher parameters and press **Run**:
-   - *Epsilon (rel)* controls how closely the tet surface follows the input
-     (smaller = more surface detail, more tets).
-   - *Edge Length (rel)* is the target edge length relative to the
+   - *Edge Length (mm)* is the target edge length; the default is 5 % of the
      bounding-box diagonal.
+   - *Epsilon (mm)* is how far the tet surface may deviate from the input
+     (smaller = more surface detail, more tets).
+   - Boundaries assigned before meshing are carried over to the new surface.
 3. **Boundaries** tab — create boundary conditions and assign faces:
-   - Left-click paints the clicked region into the active boundary;
-     right-click removes it from whatever boundary it was in.
-   - *Pick angle* sets the flood-fill tolerance between neighbouring
-     triangle normals.
+   - With a boundary selected, hovering highlights the region a click would
+     paint. Left-click paints it into the active boundary; right-click
+     removes it from whatever boundary it was in.
+   - *Pick angle* sets the tolerance between neighbouring triangle normals
+     that still counts as one region.
+   - **Ctrl+Z** / **Ctrl+Shift+Z** undo and redo boundary edits.
 4. **Export** (download icon) — writes `.vol`, `.msh` or `.inp` with volume
    plus boundary faces. Every face carries the name of its boundary;
    unassigned faces are written as `default`. Tet10 is optional for the
    formats that support it.
+5. **Save project** (disk icon) — writes a `.pvp` file (HDF5) with the
+   original input file, surface, boundaries, volume mesh and mesher
+   parameters. Open it again like any other file (folder icon, drag & drop
+   or on the command line).
 
 The orientation gizmo in the lower-right corner snaps the camera to any
 of the ±X / ±Y / ±Z views. Left-click rotates, middle-drag pans,
@@ -53,7 +62,19 @@ in the sidebar.
 
 ## Project status
 
-Early, very early.
+**0.1.0-alpha** — the pre-processing chain (surface → tet mesh → boundaries →
+export) works end to end, but expect rough edges and breaking changes,
+including in the project file format.
+
+### Roadmap
+
+- **Gmsh as an optional second mesher** — used when installed
+  (`pip install gmsh`), not shipped in the release packages because Gmsh is
+  GPL-licensed. Brings STEP/IGES import with CAD faces as selection units.
+- **Local mesh size per boundary** — click a boundary, set a target edge
+  length in mm.
+- **Mesh quality view** — histogram, colouring by element quality together
+  with the clip plane, jump to the worst element.
 
 ## Building from source
 

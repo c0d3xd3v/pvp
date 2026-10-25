@@ -66,7 +66,7 @@ class CMakeBuild(build_ext):
 
 setup(
     name="pvp",
-    version="0.1",
+    version="0.1.0a1",
     author="K4!",
     ext_modules=[
         CMakeExtension(

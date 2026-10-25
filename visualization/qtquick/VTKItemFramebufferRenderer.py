@@ -195,6 +195,10 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
         self.__setEventInformation(event.position(), ctrl, shift, chr(0), repeat, None)
 
         if event.type() == QEvent.MouseButtonPress or event.type() == QEvent.MouseButtonDblClick:
+            # Button events are dispatched before the frame's pending move, so a
+            # click right after moving onto the gizmo would land "cold" (it only
+            # reacts to a press over a handle it saw hovered). Move there first.
+            self.rwi.MouseMoveEvent()
             if event.button() == Qt.LeftButton:
                 self.rwi.LeftButtonPressEvent()
             elif event.button() == Qt.RightButton:

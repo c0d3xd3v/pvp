@@ -1,4 +1,5 @@
 
+import threading
 from collections import deque
 
 from PySide6.QtWidgets import QApplication
@@ -18,42 +19,92 @@ from visualization.qtquick.VTKItemFramebufferRenderer import FbItemRenderer
 
 
 class _InteractorTimerBridge(QObject):
-    """vtkGenericRenderWindowInteractor fires CreateTimerEvent/DestroyTimerEvent
-    but doesn't drive the timers itself — it leaves that to the platform
-    binding. Here we hand them to QTimer so widgets that animate (like
-    vtkCameraOrientationWidget's reorient tween) actually tick, and we poke
-    the Qt-Quick item to repaint on every tick."""
+    """Drives the timers vtkGenericRenderWindowInteractor asks for (it only
+    fires CreateTimerEvent/DestroyTimerEvent), e.g. the reorient tween of
+    vtkCameraOrientationWidget.
 
-    def __init__(self, interactor, item):
-        super().__init__(item)
-        self._interactor = interactor
+    Two threads are involved: VTK (events, rendering) runs on Qt Quick's render
+    thread, while QTimer and QQuickItem.update() only work on the GUI thread.
+    So the QTimers live here on the GUI thread and merely mark a timer as due;
+    the render thread runs the due VTK TimerEvents in process_due(), right
+    before it renders the frame."""
+
+    _start_requested = Signal(int, bool, int)
+    _stop_requested = Signal(int)
+
+    def __init__(self, item):
+        super().__init__(item)   # must be constructed on the GUI thread
         self._item = item
+        self._interactor = None
         self._timers: dict[int, QTimer] = {}
+        self._lock = threading.Lock()
+        self._alive: set[int] = set()
+        self._due: set[int] = set()
+        self._start_requested.connect(self._start, Qt.QueuedConnection)
+        self._stop_requested.connect(self._stop, Qt.QueuedConnection)
+
+    def attach(self, interactor):
+        self._interactor = interactor
         interactor.AddObserver("CreateTimerEvent", self._on_create)
         interactor.AddObserver("DestroyTimerEvent", self._on_destroy)
 
-    def _on_create(self, obj, _event):
-        duration = max(1, int(obj.GetTimerEventDuration()))
-        vtk_id = int(obj.GetTimerEventId())
-        is_oneshot = (obj.GetTimerEventType() == obj.OneShotTimer)
-        timer = QTimer(self)
-        timer.setSingleShot(is_oneshot)
-        timer.setInterval(duration)
-        timer.timeout.connect(lambda tid=vtk_id: self._tick(tid))
-        self._timers[vtk_id] = timer
-        obj.SetTimerEventPlatformId(vtk_id)
-        timer.start()
+    # --- render thread ------------------------------------------------------
 
-    def _tick(self, vtk_id):
-        self._interactor.SetTimerEventId(vtk_id)
-        self._interactor.TimerEvent()
-        self._item.update()
-        t = self._timers.get(vtk_id)
-        if t is not None and t.isSingleShot():
-            self._timers.pop(vtk_id, None)
+    def _on_create(self, obj, _event):
+        vtk_id = int(obj.GetTimerEventId())
+        duration = int(obj.GetTimerEventDuration())
+        obj.SetTimerEventPlatformId(vtk_id)
+        with self._lock:
+            self._alive.add(vtk_id)
+            # Short timers are due at the next frame: the camera widget puts the
+            # camera at the target pose until its first tick, so waiting a full
+            # interval would flash the end pose before the animation plays.
+            if duration <= 16:
+                self._due.add(vtk_id)
+        # One VTK tick per displayed frame at most (~60 fps), otherwise the
+        # whole tween runs between two frames and looks like a jump.
+        self._start_requested.emit(vtk_id, obj.GetTimerEventType() == obj.OneShotTimer,
+                                   max(16, duration))
 
     def _on_destroy(self, obj, _event):
         vtk_id = int(obj.GetTimerEventPlatformId())
+        with self._lock:
+            self._alive.discard(vtk_id)
+            self._due.discard(vtk_id)
+        self._stop_requested.emit(vtk_id)
+
+    def process_due(self):
+        if self._interactor is None:
+            return
+        with self._lock:
+            due, self._due = self._due & self._alive, set()
+        for vtk_id in due:
+            self._interactor.SetTimerEventId(vtk_id)
+            self._interactor.TimerEvent()
+
+    # --- GUI thread ---------------------------------------------------------
+
+    @Slot(int, bool, int)
+    def _start(self, vtk_id, oneshot, interval_ms):
+        self._stop(vtk_id)
+        timer = QTimer(self)
+        timer.setSingleShot(oneshot)
+        timer.setInterval(interval_ms)
+        timer.timeout.connect(lambda: self._fire(vtk_id, oneshot))
+        self._timers[vtk_id] = timer
+        timer.start()
+        self._item.update()
+
+    def _fire(self, vtk_id, oneshot):
+        with self._lock:
+            if vtk_id in self._alive:
+                self._due.add(vtk_id)
+        if oneshot:
+            self._stop(vtk_id)
+        self._item.update()
+
+    @Slot(int)
+    def _stop(self, vtk_id):
         timer = self._timers.pop(vtk_id, None)
         if timer is not None:
             timer.stop()
@@ -118,7 +169,7 @@ class VTKItem(QQuickFramebufferObject):
         rep.AnchorToLowerRight()
         rep.SetSize(80, 80)
         rep.SetPadding(6, 6)
-        self._timer_bridge = None   # created in object_created
+        self._timer_bridge = _InteractorTimerBridge(self)   # attached in object_created
         self._yflip = None
 
         self.setAcceptHoverEvents(True)
@@ -148,17 +199,14 @@ class VTKItem(QQuickFramebufferObject):
             renderer.SetBackground2(bgcolor)
             renderer.GradientBackgroundOn()
 
+            # Runs on the render thread, from createRenderer() inside
+            # updatePaintNode() — the one place besides the GUI thread where
+            # Qt accepts self.update().
             self.om.SetParentRenderer(renderer)
             self.om.SetInteractor(self.interactor)
-            # Timer-bridge first so the widget's reorient animation can tick
-            # as soon as it's enabled.
-            self._timer_bridge = _InteractorTimerBridge(self.interactor, self)
+            self._timer_bridge.attach(self.interactor)
             self._yflip = _GizmoYFlipGuard(self.interactor, self.om, active=False)
             self.om.On()
-            # The widget drives the camera from a timer, not a mouse-move
-            # event, so Qt-Quick wouldn't know to repaint on its own.
-            self.om.AddObserver("InteractionEvent", lambda *_: self.update())
-            self.om.AddObserver("EndInteractionEvent", lambda *_: self.update())
 
             self.update()
             self.mouse_interactor.set_pixel_ratio(self.window().devicePixelRatio())

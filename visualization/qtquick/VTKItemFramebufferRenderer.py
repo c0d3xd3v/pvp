@@ -117,6 +117,12 @@ class FbItemRenderer(QQuickFramebufferObject.Renderer):
         # Process mouse events
         self._process_mouse_events()
 
+        # VTK timers (e.g. the orientation gizmo's tween) tick here, on the
+        # render thread, once per frame
+        bridge = getattr(self.vtkitem, "_timer_bridge", None)
+        if bridge is not None:
+            bridge.process_due()
+
         # Render
         self.rw.Render()
         self.rwi.Render()

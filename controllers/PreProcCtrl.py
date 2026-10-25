@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import numpy as np
-import vtk
+from visualization.vtk import vtklib as vtk
 from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from PySide6.QtCore import Slot, Signal, QObject, QUrl

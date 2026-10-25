@@ -1,4 +1,3 @@
-import meshio
 import numpy as np
 import locale
 
@@ -15,6 +14,7 @@ class TriangleSurfaceMeshFieldFile(AbstractResultData):
         self.__read_mesh_file(path)
 
     def __read_mesh_file(self, file_path:str):
+        import meshio   # not needed at startup
         old_locale = locale.getlocale(locale.LC_NUMERIC)
         locale.setlocale(locale.LC_NUMERIC, "C")
 

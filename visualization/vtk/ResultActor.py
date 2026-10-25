@@ -1,4 +1,4 @@
-import vtkmodules.all as vtk
+from visualization.vtk import vtklib as vtk
 from visualization.vtk.vtkhelper import *
 import numpy as np
 import math

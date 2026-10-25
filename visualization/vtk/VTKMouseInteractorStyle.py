@@ -1,5 +1,6 @@
-import vtk
 from PySide6 import QtCore
+
+from visualization.vtk import vtklib as vtk
 
 
 class VTKMouseInteractorStyleQtSignals(QtCore.QObject):

@@ -8,8 +8,7 @@ from PySide6.QtGui import QSurfaceFormat, QMouseEvent, QWheelEvent
 from PySide6.QtQuick import QQuickFramebufferObject
 from PySide6.QtQml import qmlRegisterType
 
-import vtk
-
+from visualization.vtk import vtklib as vtk
 from visualization.vtk.VTKMouseInteractorStyle import VTKMouseInteractorStyle
 from visualization.qtquick.mouse_helper import cloneMouseEvent
 from visualization.qtquick.mouse_helper import cloneWheelEvent

@@ -1,5 +1,3 @@
-import meshio
-
 from pathlib import Path
 
 from fileio.SurfaceMeshGeometryFile import TriangleSurfaceMeshGeometryFile

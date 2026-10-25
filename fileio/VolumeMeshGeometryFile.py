@@ -1,6 +1,3 @@
-import meshio
-import ngsolve as ngs
-
 from geometry.AbstractMeshData import AbstractGeometryData
 
 
@@ -17,7 +14,9 @@ class TetrahedralVolumeMeshGeometryFile(AbstractGeometryData):
         self.__read_mesh_file(path)
 
     def __read_mesh_file(self, file_path:str):
+        # Imported here, not at module level: they cost ~0.2 s of startup time
         if file_path.endswith(".vol"):
+            import ngsolve as ngs
             ngs_mesh = ngs.Mesh(file_path)
             ngmesh = ngs_mesh.ngmesh
             self.__vertices = [[p[0], p[1], p[2]] for p in ngmesh.Points()]
@@ -51,6 +50,7 @@ class TetrahedralVolumeMeshGeometryFile(AbstractGeometryData):
             except Exception:
                 pass
         elif file_path.endswith(".msh"):
+            import meshio
             mesh = meshio.read(file_path)
             self.__vertices = mesh.points.tolist()
             self.__triangles = mesh.cells_dict["triangle"].tolist()

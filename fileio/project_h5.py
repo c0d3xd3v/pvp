@@ -13,7 +13,6 @@ volume mesh, mesher parameters and UI settings. Layout (format_version 1):
 from dataclasses import dataclass, field
 from importlib import metadata
 
-import h5py
 import numpy as np
 
 from geometry.Partition import Partition
@@ -57,6 +56,7 @@ def _put(group, name, data, dtype):
 
 
 def save_project(path: str, state: ProjectState):
+    import h5py     # imported on use to keep startup fast
     with h5py.File(path, "w") as f:
         f.attrs.update(format=FORMAT, format_version=FORMAT_VERSION,
                        app_version=_app_version(), units="mm")
@@ -97,6 +97,7 @@ def save_project(path: str, state: ProjectState):
 
 
 def load_project(path: str) -> ProjectState:
+    import h5py
     with h5py.File(path, "r") as f:
         if f.attrs.get("format") != FORMAT:
             raise ValueError(f"{path} is not a pvp project file")

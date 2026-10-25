@@ -18,6 +18,28 @@ QML_FILES = [
 ]
 
 
+def _check_vtk():
+    # The app imports only a subset of VTK (visualization/vtk/vtklib.py). Some
+    # of it is needed solely for object-factory overrides, which would only fail
+    # later at render time — check that those resolve to the real implementations.
+    from visualization.vtk import vtklib as vtk
+    impl = {
+        "vtkPolyDataMapper": vtk.vtkPolyDataMapper().GetClassName(),
+        "vtkRenderer": vtk.vtkRenderer().GetClassName(),
+        "vtkTextRenderer": vtk.vtkTextRenderer.GetInstance().GetClassName(),
+        "interactor style": vtk.vtkRenderWindowInteractor().GetInteractorStyle().GetClassName(),
+    }
+    expected = {
+        "vtkPolyDataMapper": "vtkOpenGLPolyDataMapper",
+        "vtkRenderer": "vtkOpenGLRenderer",
+        "vtkTextRenderer": "vtkMathTextFreeTypeTextRenderer",
+        "interactor style": "vtkInteractorStyleSwitch",
+    }
+    if impl != expected:
+        raise RuntimeError(f"VTK factory overrides missing: got {impl}, expected {expected}")
+    print(f"  vtk ok: {vtk.vtkVersion.GetVTKVersion()}, factories {sorted(set(impl.values()))}")
+
+
 def _check_qml():
     from PySide6.QtCore import QUrl
     from PySide6.QtQml import QQmlEngine, QQmlComponent
@@ -64,8 +86,7 @@ def run() -> int:
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv[:1])   # noqa: F841  needed for QML engine
     try:
-        import vtk
-        print(f"  vtk ok: {vtk.vtkVersion.GetVTKVersion()}")
+        _check_vtk()
         _check_qml()
         _check_meshing_and_export()
     except Exception:

@@ -1,6 +1,7 @@
 import numpy as np
-import vtk
 from vtkmodules.util.numpy_support import numpy_to_vtk
+
+from visualization.vtk import vtklib as vtk
 
 from geometry.AbstractMeshData import AbstractGeometryData
 

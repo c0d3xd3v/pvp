@@ -1,17 +1,14 @@
 from collections import deque
 from typing import List, Optional, Dict, Set, Tuple
 import sys
-import igl
 import numpy as np
-from scipy.sparse import coo_matrix
-from scipy.sparse.csgraph import connected_components
 
 from geometry.ConditionalGraph import ConditionalGraph
 from geometry.ConditionalGraph import GraphCompareCondition
 
-import vtk
-from vtk.util.numpy_support import vtk_to_numpy
-from vtk.util.numpy_support import numpy_to_vtk
+from visualization.vtk import vtklib as vtk
+from vtkmodules.util.numpy_support import vtk_to_numpy
+from vtkmodules.util.numpy_support import numpy_to_vtk
 
 class TriangleMeshCompareCondition(GraphCompareCondition):
     """Condition für Triangle Meshes basierend auf Normalen"""
@@ -151,6 +148,8 @@ class TriangleMeshGraph(ConditionalGraph):
         # Computed once per angle with NumPy/SciPy; a Python flood fill per hover
         # took up to seconds on large flat faces.
         if self._regions is None:
+            from scipy.sparse import coo_matrix                    # ~0.1 s, not needed at startup
+            from scipy.sparse.csgraph import connected_components
             n = self.condition.compute_all_normals()
             p0, p1 = self._pairs[:, 0], self._pairs[:, 1]
             smooth = np.einsum("ij,ij->i", n[p0], n[p1]) > np.cos(np.radians(self.condition.angle_threshold))

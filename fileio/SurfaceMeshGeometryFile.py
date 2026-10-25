@@ -1,4 +1,3 @@
-import igl
 import numpy as np
 import locale
 
@@ -13,6 +12,7 @@ class TriangleSurfaceMeshGeometryFile(AbstractGeometryData):
         self.__read_mesh_file(path, scale)
 
     def __read_mesh_file(self, file_path: str, scale: float):
+        import igl      # ~0.3 s; only needed once a surface file is opened
         old_locale = locale.getlocale(locale.LC_NUMERIC)
         locale.setlocale(locale.LC_NUMERIC, "C")
         sv, sf = igl.read_triangle_mesh(file_path)

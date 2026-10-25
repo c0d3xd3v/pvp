@@ -16,7 +16,7 @@ from vtkmodules.vtkRenderingCore import (
     vtkRenderWindowInteractor,
     vtkRenderer
 )
-import vtk
+from visualization.vtk import vtklib as vtk
 import xml.etree.ElementTree as ET
 
 

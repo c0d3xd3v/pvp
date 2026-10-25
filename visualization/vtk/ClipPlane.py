@@ -1,4 +1,4 @@
-import vtk
+from visualization.vtk import vtklib as vtk
 
 
 NORMALS = {

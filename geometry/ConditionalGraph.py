@@ -1,7 +1,6 @@
 from collections import deque
 from typing import List, Optional, Dict, Set, Tuple
 import sys
-import igl
 import numpy as np
 
 

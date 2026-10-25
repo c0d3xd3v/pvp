@@ -3,7 +3,7 @@ import numpy as np
 from PySide6.QtCore import Slot
 from PySide6.QtCore import QObject
 
-import vtk
+from visualization.vtk import vtklib as vtk
 from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from visualization.vtk.ResultActor import ResultActor

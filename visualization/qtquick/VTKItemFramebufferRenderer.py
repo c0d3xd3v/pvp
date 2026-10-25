@@ -2,7 +2,7 @@ import os
 import sys
 import platform
 
-import vtk
+from visualization.vtk import vtklib as vtk
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QEvent, QPointF

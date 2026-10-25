@@ -184,8 +184,8 @@ class SceneCtrl(QObject):
         self.__render()
 
     @scene_locked
-    def add_background_geometry(self, polydata: vtk.vtkPolyData):
-        self.__add_role_actor("background", polydata, color=(0.2, 0.9, 0.3), opacity=0.4, wireframe=True)
+    def add_background_geometry(self, mesh):
+        self.__add_role_actor("background", _triangle_polydata(mesh.vertices, mesh.triangles), color=(0.2, 0.9, 0.3), opacity=0.4, wireframe=True)
 
     @scene_locked
     def reset_view_toggles(self):
@@ -240,9 +240,9 @@ class SceneCtrl(QObject):
 
     @scene_locked
     def add_result_geometry(self, data):
-        self.__polydata = _triangle_polydata(data.get_vertices(), data.get_triangles())
-        for name in data.get_field_names():
-            vtk_array = numpy_to_vtk(np.array(data.get_vertex_field_data(name)), deep=True)
+        self.__polydata = _triangle_polydata(data.vertices, data.triangles)
+        for name, values in data.fields.items():
+            vtk_array = numpy_to_vtk(np.ascontiguousarray(values), deep=True)
             vtk_array.SetName(name)
             self.__polydata.GetPointData().AddArray(vtk_array)
         self.__prepare_result_rendering()

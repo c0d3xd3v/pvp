@@ -3,7 +3,7 @@ import ngsolve as ngs
 import pytest
 
 from pvp.fileio.NetgenVolWriter import write_vol
-from pvp.fileio.VolumeMeshGeometryFile import TetrahedralVolumeMeshGeometryFile
+from pvp.fileio.readers import read_volume
 from pvp.fileio.export_model import ExportMesh, BCGroup
 
 
@@ -64,13 +64,12 @@ def test_boundary_names_and_areas(written):
 
 def test_reimport(written):
     path, P, T, F, groups = written
-    data = TetrahedralVolumeMeshGeometryFile(path)
-    assert len(data.get_vertices()) == len(P)
-    assert len(data.get_tetrahedra()) == len(T)
-    assert len(data.get_triangles()) == len(F)
-    assert data.get_bc_names() == {1: "inlet", 2: "wall"}
-    bcs = np.array(data.get_triangle_bcs())
-    assert (bcs == 1).sum() == len(groups[0].triangles)
+    data = read_volume(path)
+    assert len(data.vertices) == len(P)
+    assert len(data.tetrahedra) == len(T)
+    assert len(data.triangles) == len(F)
+    assert data.bc_names == {1: "inlet", 2: "wall"}
+    assert (data.triangle_bcs == 1).sum() == len(groups[0].triangles)
 
 
 def test_triangle_not_on_a_tet_is_rejected(tmp_path, unit_cube):

@@ -6,11 +6,10 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 
 from PySide6.QtCore import Slot, Signal, QObject, QUrl
 
-from pvp.controllers.FileIOCtrl import FileIOCtrl
 from pvp.geometry.PreProcSession import PreProcSession, PreProcMesh
 from pvp.geometry.MeshRole import MeshRole
-from pvp.geometry.AbstractMeshData import AbstractGeometryData
-from pvp.geometry.InMemoryMeshData import InMemoryMeshData
+from pvp.model.mesh import Mesh
+from pvp.fileio.readers import read_surface, read_volume
 from pvp.fileio.formats import EXPORT_FORMATS
 from pvp.fileio.export_model import ExportMesh, BCGroup
 from pvp.fileio import project_h5
@@ -23,7 +22,6 @@ class PreProcCtrl(QObject):
     def __init__(self):
         super().__init__()
         self.__session = PreProcSession()
-        self.__fileio_ctrl = FileIOCtrl()
         self.__scene_ctrl = None
         self.__selection_ctrl = None
 
@@ -47,8 +45,7 @@ class PreProcCtrl(QObject):
     @Slot(str, float)
     @Slot(str)
     def loadSurface(self, file_path: str, scale: float = 1.0):
-        self.__fileio_ctrl.load_file(file_path, scale=scale)
-        data = self.__fileio_ctrl.get_geometry()
+        data = read_surface(file_path, scale)
         self.__start_new_project(file_path)
         self.__session.set(PreProcMesh(
             role=MeshRole.SURFACE,
@@ -57,16 +54,15 @@ class PreProcCtrl(QObject):
         ))
         if self.__scene_ctrl:
             self.__scene_ctrl.reset_view_toggles()
-            self.__scene_ctrl.add_surface_geometry(data.get_vertices(), data.get_triangles())
+            self.__scene_ctrl.add_surface_geometry(data.vertices, data.triangles)
             if self.__selection_ctrl:
                 self.__selection_ctrl.set_picking_enabled(True)
-                self.__selection_ctrl.load_geometry(data.get_vertices(), data.get_triangles())
+                self.__selection_ctrl.load_geometry(data.vertices, data.triangles)
         self.sessionChanged.emit()
 
     @Slot(str)
     def loadVolume(self, file_path: str):
-        self.__fileio_ctrl.load_file(file_path)
-        data = self.__fileio_ctrl.get_geometry()
+        data = read_volume(file_path)
 
         # A .vol carries surface + volume + boundary info — treat as fresh project.
         self.__start_new_project(file_path)
@@ -78,19 +74,19 @@ class PreProcCtrl(QObject):
         if self.__scene_ctrl:
             self.__scene_ctrl.reset_view_toggles()
             # Build surface (also resets partitions, sets up FaceSelectionActor)
-            self.__scene_ctrl.add_surface_geometry(data.get_vertices(), data.get_triangles())
+            self.__scene_ctrl.add_surface_geometry(data.vertices, data.triangles)
             if self.__selection_ctrl:
                 self.__selection_ctrl.set_picking_enabled(True)
-                self.__selection_ctrl.load_geometry(data.get_vertices(), data.get_triangles())
+                self.__selection_ctrl.load_geometry(data.vertices, data.triangles)
 
             # Build volume
-            if data.has_tetrahedra():
+            if data.has_tetrahedra:
                 self.__scene_ctrl.add_volume_unstructured_mesh(
-                    data.get_vertices(), data.get_tetrahedra()
+                    data.vertices, data.tetrahedra
                 )
             else:
                 self.__scene_ctrl.add_volume_geometry(
-                    data.get_vertices(), data.get_triangles()
+                    data.vertices, data.triangles
                 )
 
             # Populate partitions from BC info if the file carries any
@@ -99,39 +95,29 @@ class PreProcCtrl(QObject):
         self.sessionChanged.emit()
 
     def __populate_partitions_from_bcs(self, data):
-        bc_names = data.get_bc_names()
-        triangle_bcs = data.get_triangle_bcs()
-        if not bc_names or not triangle_bcs:
+        if not data.bc_names or len(data.triangle_bcs) == 0:
             return
-        # Group triangle indices by BC number
-        bc_to_triangles: dict[int, list[int]] = {}
-        for tri_idx, bc in enumerate(triangle_bcs):
-            bc_to_triangles.setdefault(bc, []).append(tri_idx)
         # Skip empty and "default" names — the latter is our sentinel written by
         # exportVolume for unassigned triangles. Treating it as unassigned again on
         # load makes the round-trip idempotent (no duplicate "default" entries).
-        for bc_idx, bc_name in bc_names.items():
+        for bc_idx, bc_name in data.bc_names.items():
             name = (bc_name or "").strip()
-            if not name or name.lower() == "default" or bc_idx not in bc_to_triangles:
+            faces = np.flatnonzero(data.triangle_bcs == bc_idx)
+            if not name or name.lower() == "default" or faces.size == 0:
                 continue
             pid = self.__scene_ctrl.partitions.add(name, record=False)
-            self.__scene_ctrl.partitions.assign_faces(bc_to_triangles[bc_idx], pid, record=False)
+            self.__scene_ctrl.partitions.assign_faces(faces, pid, record=False)
 
     @Slot()
     def createBackgroundMesh(self):
         surface = self.__session.surface
         if surface is None:
             return
-        from pvp.geometry.OBBMeshGenerator import OBBMeshGenerator
-        generator = OBBMeshGenerator(surface.data.get_vertices())
-        polydata = generator.get_vtk_polydata()
-        self.__session.set(PreProcMesh(
-            role=MeshRole.BACKGROUND,
-            data=generator,
-            name="OBB"
-        ))
+        from pvp.geometry.bounding_box import bounding_box_mesh
+        box = bounding_box_mesh(surface.data.vertices)
+        self.__session.set(PreProcMesh(role=MeshRole.BACKGROUND, data=box, name="OBB"))
         if self.__scene_ctrl:
-            self.__scene_ctrl.add_background_geometry(polydata)
+            self.__scene_ctrl.add_background_geometry(box)
         self.sessionChanged.emit()
 
     def snapshot_boundary_assignments(self) -> dict | None:
@@ -152,8 +138,8 @@ class PreProcCtrl(QObject):
         if not names:
             return None
         return {
-            "vertices": np.asarray(surface.data.get_vertices(), dtype=np.float64),
-            "triangles": np.asarray(surface.data.get_triangles(), dtype=np.int64),
+            "vertices": np.asarray(surface.data.vertices, dtype=np.float64),
+            "triangles": np.asarray(surface.data.triangles, dtype=np.int64),
             "ids_per_cell": np.asarray(part_ids, dtype=np.int32),
             "names": names,
         }
@@ -167,10 +153,8 @@ class PreProcCtrl(QObject):
         the new surface via nearest-cell lookup against the pre-meshing
         geometry (fTetWild emits a surface close to the input, so centroids
         map reliably back to their original triangles)."""
-        V = np.asarray(vertices).tolist()
-        tris = np.asarray(triangles).tolist()
-        tets = np.asarray(tetrahedra).tolist()
-        data = InMemoryMeshData(vertices=V, triangles=tris, tetrahedra=tets)
+        data = Mesh(vertices=vertices, triangles=triangles, tetrahedra=tetrahedra)
+        V, tris = data.vertices, data.triangles
 
         # Treat as fresh project
         self.__session.clear(MeshRole.BACKGROUND)
@@ -259,10 +243,10 @@ class PreProcCtrl(QObject):
         s = self.__session
         parts = self.__scene_ctrl.partitions
         surf = s.surface.data
-        tris = np.asarray(surf.get_triangles(), dtype=np.int64)
+        tris = np.asarray(surf.triangles, dtype=np.int64)
         ids = parts.ids_per_cell()
         state = project_h5.ProjectState(
-            surface_vertices=np.asarray(surf.get_vertices(), dtype=np.float64),
+            surface_vertices=np.asarray(surf.vertices, dtype=np.float64),
             surface_triangles=tris,
             partition_ids=ids if ids is not None else np.zeros(len(tris), dtype=np.int32),
             partitions=parts.all(),
@@ -274,11 +258,11 @@ class PreProcCtrl(QObject):
             mesher_name=s.mesher_name,
             mesher_params=dict(s.mesher_params),
         )
-        if s.volume is not None and s.volume.data is not None and s.volume.data.has_tetrahedra():
+        if s.volume is not None and s.volume.data is not None and s.volume.data.has_tetrahedra:
             vol = s.volume.data
-            state.volume_vertices = np.asarray(vol.get_vertices(), dtype=np.float64)
-            state.volume_triangles = np.asarray(vol.get_triangles(), dtype=np.int64)
-            state.volume_tetrahedra = np.asarray(vol.get_tetrahedra(), dtype=np.int64)
+            state.volume_vertices = np.asarray(vol.vertices, dtype=np.float64)
+            state.volume_triangles = np.asarray(vol.triangles, dtype=np.int64)
+            state.volume_tetrahedra = np.asarray(vol.tetrahedra, dtype=np.int64)
         try:
             project_h5.save_project(file_path, state)
         except Exception as e:
@@ -298,12 +282,10 @@ class PreProcCtrl(QObject):
         for role in MeshRole:
             self.__session.clear(role)
         name = Path(file_path).stem
-        surface = InMemoryMeshData(vertices=state.surface_vertices.tolist(),
-                                   triangles=state.surface_triangles.tolist())
+        surface = Mesh(vertices=state.surface_vertices, triangles=state.surface_triangles)
         if state.has_volume:
-            volume = InMemoryMeshData(vertices=state.volume_vertices.tolist(),
-                                      triangles=state.volume_triangles.tolist(),
-                                      tetrahedra=state.volume_tetrahedra.tolist())
+            volume = Mesh(vertices=state.volume_vertices, triangles=state.volume_triangles,
+                          tetrahedra=state.volume_tetrahedra)
             if (np.array_equal(state.volume_vertices, state.surface_vertices)
                     and np.array_equal(state.volume_triangles, state.surface_triangles)):
                 surface = volume    # as after meshing / loading a .vol: one shared mesh
@@ -316,11 +298,11 @@ class PreProcCtrl(QObject):
 
         if self.__scene_ctrl:
             self.__scene_ctrl.reset_view_toggles()
-            self.__scene_ctrl.add_surface_geometry(surface.get_vertices(), surface.get_triangles())
+            self.__scene_ctrl.add_surface_geometry(surface.vertices, surface.triangles)
             if self.__selection_ctrl:
                 self.__selection_ctrl.set_picking_enabled(True)
                 self.__selection_ctrl.set_normal_compare_angle(state.normal_angle)
-                self.__selection_ctrl.load_geometry(surface.get_vertices(), surface.get_triangles())
+                self.__selection_ctrl.load_geometry(surface.vertices, surface.triangles)
             if state.has_volume:
                 self.__scene_ctrl.add_volume_unstructured_mesh(state.volume_vertices,
                                                                state.volume_tetrahedra)
@@ -386,7 +368,7 @@ class PreProcCtrl(QObject):
         vol_mesh = self.__session.volume
         if vol_mesh is None or vol_mesh.data is None:
             return False
-        return vol_mesh.data.has_tetrahedra() and len(vol_mesh.data.get_triangles()) > 0
+        return vol_mesh.data.has_tetrahedra and len(vol_mesh.data.triangles) > 0
 
     def __collect_bc_groups(self, n_triangles: int) -> list[BCGroup]:
         """Map the current partitions to triangle groups via the FaceSelectionActor's
@@ -414,11 +396,11 @@ class PreProcCtrl(QObject):
 
     def __build_export_mesh(self) -> ExportMesh:
         data = self.__session.volume.data
-        tris = data.get_triangles()
+        tris = data.triangles
         groups = self.__collect_bc_groups(len(tris))
         return ExportMesh(
-            nodes=data.get_vertices(),
-            tets=data.get_tetrahedra(),
+            nodes=data.vertices,
+            tets=data.tetrahedra,
             surface_tri=tris,
             bc_groups=groups,
         )
@@ -431,13 +413,13 @@ class PreProcCtrl(QObject):
             return {"boundaries": 0, "unassigned": 0, "tets": 0}
         data = vol_mesh.data
         try:
-            groups = self.__collect_bc_groups(len(data.get_triangles()))
+            groups = self.__collect_bc_groups(len(data.triangles))
         except ValueError:
             groups = []
         named = [g for g in groups if g.name != "default"]
         unassigned = sum(len(g.triangles) for g in groups if g.name == "default")
         return {"boundaries": len(named), "unassigned": unassigned,
-                "tets": len(data.get_tetrahedra())}
+                "tets": len(data.tetrahedra)}
 
     @Slot(result='QVariantList')
     def getExportFormats(self) -> list:

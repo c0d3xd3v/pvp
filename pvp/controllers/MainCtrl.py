@@ -12,7 +12,7 @@ from pvp.controllers.SceneCtrl import SceneCtrl
 from pvp.controllers.PreProcCtrl import PreProcCtrl
 from pvp.controllers.ResultCtrl import ResultCtrl
 from pvp.controllers.MeshingCtrl import MeshingCtrl
-from pvp.controllers.FileIOCtrl import FileIOCtrl
+from pvp.fileio.readers import read_result
 from pvp.fileio.formats import file_kind
 from pvp.visualization.qtquick.VTKItem import VTKItem
 
@@ -23,7 +23,6 @@ class MainCtrl(QObject):
 
     def __init__(self):
         super().__init__()
-        self.__fileio_ctrl    = FileIOCtrl()
         self.__selection_ctrl = SelectionCtrl()
         self.__scene_ctrl     = SceneCtrl()
         self.__preproc_ctrl    = PreProcCtrl()
@@ -83,8 +82,7 @@ class MainCtrl(QObject):
         kind = file_kind(file_path)
 
         if kind == "result":
-            self.__fileio_ctrl.load_file(file_path)
-            data = self.__fileio_ctrl.get_geometry()
+            data = read_result(file_path)
             self.__selection_ctrl.set_picking_enabled(False)
             self.__scene_ctrl.reset_view_toggles()
             self.__scene_ctrl.add_result_geometry(data)

@@ -97,8 +97,9 @@ built.
 | `pvp/visualization/vtk/` | VTK actors, boundary partitions, clip plane, mouse interaction |
 | `pvp/visualization/qtquick/` | `VTKItem`: VTK rendering inside Qt Quick |
 | `pvp/meshing/` | Mesher interface (`TetMesher.py`) and fTetWild implementation |
-| `pvp/fileio/` | Readers and writers; `formats.py` maps extensions and lists the export formats |
-| `pvp/geometry/` | Mesh data interface/containers, pre-processing session, geometry helpers |
+| `pvp/fileio/` | `readers.py`, the writers, the project file; `formats.py` maps extensions and lists the export formats |
+| `pvp/model/` | Data model without Qt/VTK: `Mesh`/`ResultMesh` (NumPy arrays) |
+| `pvp/geometry/` | Pre-processing session, face regions, bounding box |
 | `resources/` | Qt resources: icons, colormaps (`resources.qrc`) |
 | `tests/` | pytest suite |
 | `external/fTetWild` | fTetWild (git submodule) |

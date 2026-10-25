@@ -27,7 +27,7 @@ class ResultCtrl(QObject):
     def getFunctionNames(self):
         if self.__result_data is None:
             return []
-        names = self.__result_data.get_field_names() or []
+        names = list(self.__result_data.fields)
         return sorted(names, key=_natural_sort_key)
 
     @Slot(str)
@@ -40,7 +40,7 @@ class ResultCtrl(QObject):
     def isCurrentFieldVectorValued(self):
         if self.__result_data is None or self.__current_field_name is None:
             return False
-        data = self.__result_data.get_vertex_field_data(self.__current_field_name)
+        data = self.__result_data.fields.get(self.__current_field_name)
         if data is None:
             return False
         return data.ndim > 1 and data.shape[1] > 1

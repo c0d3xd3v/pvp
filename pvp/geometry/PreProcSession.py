@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from pvp.geometry.MeshRole import MeshRole
-from pvp.geometry.AbstractMeshData import AbstractGeometryData
+from pvp.model.mesh import Mesh
 
 
 @dataclass
 class PreProcMesh:
     role: MeshRole
-    data: AbstractGeometryData
+    data: Mesh | None
     name: str = ""
 
 

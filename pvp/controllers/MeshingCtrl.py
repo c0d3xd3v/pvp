@@ -89,7 +89,7 @@ class MeshingCtrl(QObject):
         surf = self.__preproc_ctrl.get_session().surface
         if surf is None or surf.data is None:
             return None
-        V = np.asarray(surf.data.get_vertices(), dtype=np.float64)
+        V = np.asarray(surf.data.vertices, dtype=np.float64)
         if V.size == 0:
             return None
         return float(np.linalg.norm(V.max(axis=0) - V.min(axis=0)))
@@ -108,8 +108,8 @@ class MeshingCtrl(QObject):
             print("Meshing: no surface loaded")
             return False
 
-        V = np.array(surface.data.get_vertices(), dtype=np.float64)
-        F = np.array(surface.data.get_triangles(), dtype=np.int32)
+        V = np.array(surface.data.vertices, dtype=np.float64)
+        F = np.array(surface.data.triangles, dtype=np.int32)
         param_dict = {k: float(v) for k, v in dict(params).items()}
         print(f"Meshing: {mesher_name} params={param_dict}")
         session = self.__preproc_ctrl.get_session()

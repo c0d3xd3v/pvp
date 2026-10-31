@@ -42,12 +42,16 @@ def take_mesh_result(project: Project, vertices, triangles, tetrahedra, face_map
     computed when not given — the mesher worker does it off the GUI thread."""
     mesh = Mesh(vertices=vertices, triangles=triangles, tetrahedra=tetrahedra)
     if face_map is None:
-        face_map = mesh_face_map(project.surface, mesh)
+        face_map = mesh_face_map(project, mesh)
     project.set_volume(mesh, face_map)
 
 
-def mesh_face_map(surface: Mesh, volume: Mesh):
-    return closest_cells(surface.vertices, surface.triangles, volume.vertices, volume.triangles)
+def mesh_face_map(project: Project, volume: Mesh) -> np.ndarray:
+    """Closest surface triangle (of the meshed components) per volume
+    boundary triangle."""
+    faces = project.meshed_faces()
+    surf = project.surface
+    return faces[closest_cells(surf.vertices, surf.triangles[faces], volume.vertices, volume.triangles)]
 
 
 def add_bounding_box(project: Project):
@@ -65,6 +69,8 @@ def save_project_file(project: Project, path: str) -> str:
         surface_vertices=surf.vertices,
         surface_triangles=surf.triangles,
         partition_ids=ids if ids is not None else np.zeros(len(surf.triangles), dtype=np.int32),
+        surface_components=project.surface_components,
+        meshed_components=project.meshed_components,
         partitions=parts.all(),
         next_partition_id=parts.next_id(),
         current_partition=parts.current_id(),
@@ -97,9 +103,11 @@ def open_project_file(project: Project, path: str):
             surface = volume.surface_only()
             face_map = np.arange(len(volume.triangles))
     project.start(Path(path).stem, surface)
+    if state.surface_components is not None and state.meshed_components is not None:
+        project.set_components(state.surface_components, state.meshed_components)
     if volume is not None:
         project.set_volume(volume, face_map if face_map is not None
-                           else mesh_face_map(surface, volume))
+                           else mesh_face_map(project, volume))
     project.source_name, project.source_bytes = state.source_name, state.source_bytes
     project.mesher_name, project.mesher_params = state.mesher_name, dict(state.mesher_params)
     project.normal_angle = state.normal_angle

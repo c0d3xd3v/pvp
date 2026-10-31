@@ -106,3 +106,25 @@ def test_meshing_keeps_input_and_partitions(meshed, unit_cube, tmp_path):
     q = Project()
     project_ops.open_project_file(q, path)
     assert np.array_equal(q.volume_partition_ids(), ids[::-1])
+
+
+def test_only_checked_components_get_meshed_and_saved(tmp_path):
+    from pvp.geometry.surface_check import component_labels
+    V = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+    F = np.array([[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]])
+    p = Project()
+    # big tet first in the file, a small one shifted away
+    p.start("two", Mesh(vertices=np.vstack((V * 2, V + 10)), triangles=np.vstack((F, F + 4))))
+    assert list(p.surface_components) == [0] * 4 + [1] * 4
+    assert list(p.meshed_components) == [True, True]
+    p.meshed_components[0] = False
+    assert list(p.meshed_faces()) == [4, 5, 6, 7]
+
+    # a "mesh" of the second tet only: its boundary maps onto faces 4..7
+    project_ops.take_mesh_result(p, V + 10, F, np.array([[0, 1, 2, 3]]))
+    assert sorted(p.volume_face_map) == [4, 5, 6, 7]
+
+    q = Project()
+    project_ops.open_project_file(q, project_ops.save_project_file(p, str(tmp_path / "two")))
+    assert list(q.meshed_components) == [False, True]
+    assert np.array_equal(q.surface_components, component_labels(q.surface.triangles))

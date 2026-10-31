@@ -19,6 +19,7 @@ Item {
             meshRoles = PreProcCtrl.getMeshRoles()
             inputSummary = PreProcCtrl.getInputSummary()
         }
+        function onComponentsChanged() { inputSummary = PreProcCtrl.getInputSummary() }
     }
 
     ColumnLayout {
@@ -111,6 +112,67 @@ Item {
                     font.pixelSize: 12
                     text: inputTab.info.openEdges + " open edges, "
                           + inputTab.info.nonManifoldEdges + " non-manifold edges"
+                }
+
+                // Connected components; only the checked ones get meshed
+                RowLayout {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    visible: inputTab.info.loaded
+                    Label {
+                        Layout.fillWidth: true
+                        text: "Components (" + (inputTab.info.components || []).length + ")"
+                        opacity: 0.7
+                    }
+                    Button {
+                        text: "All"; flat: true
+                        leftPadding: 6; rightPadding: 6
+                        onClicked: PreProcCtrl.setAllComponentsMeshed(true)
+                    }
+                    Button {
+                        text: "None"; flat: true
+                        leftPadding: 6; rightPadding: 6
+                        onClicked: PreProcCtrl.setAllComponentsMeshed(false)
+                    }
+                }
+
+                Repeater {
+                    model: inputTab.info.components || []
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        spacing: 4
+                        HoverHandler {
+                            onHoveredChanged: PreProcCtrl.previewComponent(hovered ? modelData.index : -1)
+                        }
+                        CheckBox {
+                            checked: modelData.meshed
+                            padding: 0
+                            onToggled: PreProcCtrl.setComponentMeshed(modelData.index, checked)
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: "Part " + (modelData.index + 1)
+                        }
+                        Label {
+                            opacity: 0.7
+                            text: modelData.triangles.toLocaleString(Qt.locale(), "f", 0) + " tris"
+                        }
+                        Label {
+                            Layout.preferredWidth: 18
+                            horizontalAlignment: Text.AlignRight
+                            text: modelData.closed ? "●" : "○"
+                            color: modelData.closed ? Material.color(Material.Green, Material.Shade300)
+                                                    : Material.color(Material.Orange, Material.Shade300)
+                            ToolTip.text: modelData.closed ? "closed"
+                                                           : modelData.openEdges + " open edges"
+                            ToolTip.visible: closedHover.hovered
+                            HoverHandler { id: closedHover }
+                        }
+                    }
                 }
             }
 
@@ -284,6 +346,7 @@ Item {
                     Layout.fillWidth: true
                     enabled: meshingTab.meshing
                              || (meshToolsRoot.inputSummary.loaded
+                                 && meshToolsRoot.inputSummary.components.some(c => c.meshed)
                                  && meshingTab.currentMesher !== "")
                     Material.background: meshingTab.meshing
                                          ? Material.color(Material.Red, Material.Shade700)

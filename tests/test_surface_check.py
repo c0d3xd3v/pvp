@@ -23,3 +23,14 @@ def test_open_and_nonmanifold():
 
 def test_empty():
     assert not surface_stats(np.zeros((0, 3)), np.zeros((0, 3), dtype=int)).closed
+
+
+def test_components_sorted_by_size_with_stats():
+    from pvp.geometry.surface_check import component_labels, component_stats
+    F = np.vstack((TETRA_F[:3] + 4, TETRA_F + 8, TETRA_F, [[12, 13, 14], [12, 14, 15]]))
+    labels = component_labels(F)
+    # two closed tets (4 tris, first-seen first), open tet (3), quad (2)
+    assert list(labels) == [2] * 3 + [0] * 4 + [1] * 4 + [3] * 2
+    stats = component_stats(F, labels)
+    assert [(s.triangles, s.closed) for s in stats] == [(4, True), (4, True), (3, False), (2, False)]
+    assert stats[2].open_edges == 3 and stats[3].open_edges == 4 and stats[3].vertices == 4

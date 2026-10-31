@@ -5,6 +5,7 @@ import numpy as np
 from PySide6.QtCore import Slot, Signal, QObject, QThread
 
 from pvp.meshing.FTetWildMesher import FTetWildMesher, MeshingCancelled
+from pvp.model.mesh import Mesh
 from pvp.model.project import Project
 from pvp.services.boundary_transfer import closest_cells
 
@@ -16,11 +17,14 @@ class _MeshingWorker(QObject):
     # optimization loop), v_num, t_num (-1 outside the optimization loop)
     progress = Signal(str, float, float, int, int)
 
-    def __init__(self, mesher, vertices, triangles, params):
+    def __init__(self, mesher, vertices, triangles, surface_faces, params):
+        """vertices/triangles: what gets meshed; surface_faces: the input
+        surface triangle of each of these triangles."""
         super().__init__()
         self.__mesher = mesher
         self.__V = vertices
         self.__F = triangles
+        self.__surface_faces = surface_faces
         self.__params = params
 
     @Slot()
@@ -30,7 +34,8 @@ class _MeshingWorker(QObject):
                                         progress=self.progress.emit)
             # Which input triangle each boundary triangle takes its partition from
             self.progress.emit("Transferring boundaries", float("nan"), float("nan"), -1, -1)
-            face_map = closest_cells(self.__V, self.__F, result.vertices, result.triangles)
+            face_map = self.__surface_faces[
+                closest_cells(self.__V, self.__F, result.vertices, result.triangles)]
             self.finished.emit(True, (result, face_map))
         except MeshingCancelled:
             print("Meshing cancelled by user")
@@ -90,21 +95,27 @@ class MeshingCtrl(QObject):
         m = self.__meshers.get(mesher_name)
         if m is None:
             return False
-        # Always the input surface; a previous result is replaced
+        # Always the input surface (its checked components); a previous
+        # result is replaced
         surface = self.__project.surface
         if surface is None:
             print("Meshing: no input data loaded")
             return False
+        faces = self.__project.meshed_faces()
+        if len(faces) == 0:
+            print("Meshing: no component selected")
+            return False
 
-        V = surface.vertices
-        F = surface.triangles.astype(np.int32)
+        part = Mesh(vertices=surface.vertices, triangles=surface.triangles[faces]).surface_only()
+        V = part.vertices
+        F = part.triangles.astype(np.int32)
         param_dict = {k: float(v) for k, v in dict(params).items()}
         print(f"Meshing: {mesher_name} params={param_dict}")
         self.__project.mesher_name = mesher_name
         self.__project.mesher_params = dict(param_dict)
 
         self.__thread = QThread()
-        self.__worker = _MeshingWorker(m, V, F, param_dict)
+        self.__worker = _MeshingWorker(m, V, F, faces, param_dict)
         self.__worker.moveToThread(self.__thread)
 
         # Wiring — Qt manages cleanup via deleteLater so we never block GUI thread.

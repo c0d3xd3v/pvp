@@ -74,3 +74,30 @@ def test_broken_project_file_leaves_project_alone(meshed, tmp_path):
 def test_bounding_box(meshed):
     project_ops.add_bounding_box(meshed)
     assert len(meshed.background.triangles) == 12
+
+
+def test_input_data_survives_meshing_and_project_file(unit_cube, tmp_path):
+    from pvp.geometry.surface_check import surface_stats
+    P, T, F = unit_cube
+    src = tmp_path / "cube.vol"
+    path, _ = export.export_volume(_meshed_cube(P, T, F), str(src), "vol")
+    p = Project()
+    project_ops.open_volume(p, path)
+    inp = p.input
+    assert not inp.has_tetrahedra and len(inp.triangles) == len(F)
+    assert len(inp.vertices) < len(P)                  # interior nodes dropped
+    assert surface_stats(inp.vertices, inp.triangles).closed
+
+    project_ops.take_mesh_result(p, P, F, T, "meshed")
+    assert p.input is inp                              # meshing keeps the input
+    q = Project()
+    project_ops.open_project_file(q, project_ops.save_project_file(p, str(tmp_path / "proj")))
+    assert np.array_equal(q.input.vertices, inp.vertices)
+    assert np.array_equal(q.input.triangles, inp.triangles)
+
+
+def _meshed_cube(P, T, F):
+    p = Project()
+    mesh = Mesh(vertices=P, triangles=F, tetrahedra=T)
+    p.start("cube", mesh, volume=mesh)
+    return p

@@ -70,6 +70,9 @@ def save_project_file(project: Project, path: str) -> str:
         mesher_name=project.mesher_name,
         mesher_params=dict(project.mesher_params),
     )
+    if project.input is not None and project.input is not surf:
+        state.input_vertices = project.input.vertices
+        state.input_triangles = project.input.triangles
     if project.volume is not None and project.volume.has_tetrahedra:
         state.volume_vertices = project.volume.vertices
         state.volume_triangles = project.volume.triangles
@@ -91,6 +94,8 @@ def open_project_file(project: Project, path: str):
                 and np.array_equal(state.volume_triangles, state.surface_triangles)):
             surface = volume    # as after meshing / loading a .vol: one shared mesh
     project.start(Path(path).stem, surface, volume=volume)
+    project.input = (Mesh(vertices=state.input_vertices, triangles=state.input_triangles)
+                     if state.input_vertices is not None else surface)
     project.source_name, project.source_bytes = state.source_name, state.source_bytes
     project.mesher_name, project.mesher_params = state.mesher_name, dict(state.mesher_params)
     project.normal_angle = state.normal_angle

@@ -11,10 +11,14 @@ Item {
     implicitHeight: toolsColumn.implicitHeight
 
     property var meshRoles: PreProcCtrl.getMeshRoles()
+    property var inputSummary: PreProcCtrl.getInputSummary()
 
     Connections {
         target: PreProcCtrl
-        function onSessionChanged() { meshRoles = PreProcCtrl.getMeshRoles() }
+        function onSessionChanged() {
+            meshRoles = PreProcCtrl.getMeshRoles()
+            inputSummary = PreProcCtrl.getInputSummary()
+        }
     }
 
     ColumnLayout {
@@ -28,7 +32,8 @@ Item {
             Layout.fillWidth: true
             background: Item {}   // blend into the translucent sidebar
             TabButton { text: "Boundaries"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
-            TabButton { text: "Meshing"; leftPadding: 10; rightPadding: 10 }
+            TabButton { text: "Meshing"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
+            TabButton { text: "Input Data"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
         }
 
         StackLayout {
@@ -209,7 +214,7 @@ Item {
                     text: meshingTab.meshing ? "Cancel" : "Run"
                     Layout.fillWidth: true
                     enabled: meshingTab.meshing
-                             || (meshToolsRoot.meshRoles[0].loaded
+                             || (meshToolsRoot.inputSummary.loaded
                                  && meshingTab.currentMesher !== "")
                     Material.background: meshingTab.meshing
                                          ? Material.color(Material.Red, Material.Shade700)
@@ -219,6 +224,69 @@ Item {
                         else MeshingCtrl.runMesher(meshingTab.currentMesher,
                                                    meshingTab.paramValues)
                     }
+                }
+            }
+
+            // Tab 3: overview of the input data (what the mesher gets)
+            GridLayout {
+                id: inputTab
+                columns: 2
+                columnSpacing: 12
+                rowSpacing: 6
+                property var info: meshToolsRoot.inputSummary
+
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: !inputTab.info.loaded
+                    opacity: 0.7
+                    text: "No input data loaded"
+                }
+
+                Label { visible: inputTab.info.loaded; text: "File"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideMiddle
+                    text: inputTab.info.name || "–"
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Vertices"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.loaded ? inputTab.info.vertices.toLocaleString(Qt.locale(), "f", 0) : ""
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Triangles"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.loaded ? inputTab.info.triangles.toLocaleString(Qt.locale(), "f", 0) : ""
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Solid (closed)"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.closed ? "Yes" : "No"
+                    color: inputTab.info.closed ? Material.color(Material.Green, Material.Shade300)
+                                                : Material.color(Material.Orange, Material.Shade300)
+                }
+
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: inputTab.info.loaded && !inputTab.info.closed
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    font.pixelSize: 12
+                    text: inputTab.info.openEdges + " open edges, "
+                          + inputTab.info.nonManifoldEdges + " non-manifold edges"
                 }
             }
         }

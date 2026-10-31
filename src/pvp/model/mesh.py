@@ -36,6 +36,12 @@ class Mesh:
             return 0.0
         return float(np.linalg.norm(self.vertices.max(axis=0) - self.vertices.min(axis=0)))
 
+    def surface_only(self) -> "Mesh":
+        """The triangles with just the vertices they use (drops tets and
+        interior nodes)."""
+        used, tris = np.unique(self.triangles, return_inverse=True)
+        return Mesh(vertices=self.vertices[used], triangles=tris.reshape(-1, 3))
+
 
 @dataclass(eq=False)
 class ResultMesh:

@@ -12,6 +12,7 @@ DEFAULT_NORMAL_ANGLE = 10.0
 @dataclass(eq=False)
 class Project:
     name: str = ""                       # shown for the loaded meshes
+    input: Mesh | None = None            # surface as read from the input file; what gets meshed
     surface: Mesh | None = None          # main geometry; partitions refer to its triangles
     volume: Mesh | None = None           # tet mesh (loaded or meshed); its boundary is `surface`
     background: Mesh | None = None       # bounding box for fTetWild's sizing field
@@ -27,13 +28,15 @@ class Project:
     def start(self, name: str, surface: Mesh, volume: Mesh | None = None,
               source_path: str | None = None):
         """Replace everything with a new geometry. With source_path the input
-        file is embedded; without it the previous source is kept (meshing a
-        geometry keeps its origin)."""
+        file is embedded and `surface` becomes the input data; without it the
+        previous source and input are kept (meshing a geometry keeps its
+        origin)."""
         self.name = name
         self.surface, self.volume, self.background = surface, volume, None
         if source_path is not None:
             p = Path(source_path)
             self.source_name, self.source_bytes = p.name, p.read_bytes()
+            self.input = surface if volume is None else surface.surface_only()
             self.mesher_name, self.mesher_params = "", {}
         self.partitions.reset(len(surface.triangles))
 

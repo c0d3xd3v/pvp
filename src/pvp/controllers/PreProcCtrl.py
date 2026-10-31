@@ -1,6 +1,7 @@
 from PySide6.QtCore import Slot, Signal, QObject, QUrl
 
 from pvp.fileio.formats import EXPORT_FORMATS
+from pvp.geometry.surface_check import surface_stats
 from pvp.model.project import Project
 from pvp.services import export, project_ops
 from pvp.services.boundary_transfer import BoundarySnapshot
@@ -22,6 +23,7 @@ class PreProcCtrl(QObject):
         self.__project = project
         self.__scene_ctrl = scene_ctrl
         self.__selection_ctrl = selection_ctrl
+        self.__input_stats = (None, None)   # (input mesh, its SurfaceStats)
         project.partitions.subscribe(self.__on_partitions_changed)
 
     def __on_partitions_changed(self, _ids_changed: bool, list_changed: bool):
@@ -171,6 +173,19 @@ class PreProcCtrl(QObject):
         print(f"Exported {path} ({format_key}, quadratic={quadratic}): "
               + ", ".join(f"{g.name} ({len(g.triangles)})" for g in mesh.bc_groups))
         return ""
+
+    @Slot(result='QVariantMap')
+    def getInputSummary(self) -> dict:
+        """Size and closedness of the input data (what gets meshed)."""
+        mesh = self.__project.input
+        if mesh is None:
+            return {"loaded": False}
+        if self.__input_stats[0] is not mesh:
+            self.__input_stats = (mesh, surface_stats(mesh.vertices, mesh.triangles))
+        s = self.__input_stats[1]
+        return {"loaded": True, "name": self.__project.source_name,
+                "vertices": s.vertices, "triangles": s.triangles, "closed": s.closed,
+                "openEdges": s.open_edges, "nonManifoldEdges": s.nonmanifold_edges}
 
     @Slot(result='QVariantList')
     def getMeshRoles(self) -> list:

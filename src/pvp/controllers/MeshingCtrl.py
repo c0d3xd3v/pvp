@@ -65,7 +65,7 @@ class MeshingCtrl(QObject):
             return []
         project = self.__project
         # Absolute-unit parameters get defaults relative to the model size
-        bbox_diag = project.surface.bbox_diagonal() if project.surface is not None else 0.0
+        bbox_diag = project.input.bbox_diagonal() if project.input is not None else 0.0
         # Prefill with the parameters of the last run on this geometry (also
         # restored from a project file), else the mesher's defaults.
         last = project.mesher_params if project.mesher_name == mesher_name else {}
@@ -88,9 +88,11 @@ class MeshingCtrl(QObject):
         m = self.__meshers.get(mesher_name)
         if m is None:
             return False
-        surface = self.__project.surface
+        # Always mesh the input data, also when the project already holds a
+        # meshing result (re-meshing must not mesh the previous tet boundary)
+        surface = self.__project.input
         if surface is None:
-            print("Meshing: no surface loaded")
+            print("Meshing: no input data loaded")
             return False
 
         V = surface.vertices

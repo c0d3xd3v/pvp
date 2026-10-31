@@ -41,6 +41,8 @@ class PreProcCtrl(QObject):
         if p.volume is not None:
             if p.volume.has_tetrahedra:
                 self.__scene_ctrl.add_volume_unstructured_mesh(p.volume.vertices, p.volume.tetrahedra)
+                self.__scene_ctrl.add_volume_surface(p.volume.vertices, p.volume.triangles,
+                                                     p.volume_face_map)
             else:
                 self.__scene_ctrl.add_volume_geometry(p.volume.vertices, p.volume.triangles)
         self.sessionChanged.emit()
@@ -76,6 +78,7 @@ class PreProcCtrl(QObject):
                                      result.tetrahedra, face_map)
         v = self.__project.volume
         self.__scene_ctrl.add_volume_unstructured_mesh(v.vertices, v.tetrahedra)
+        self.__scene_ctrl.add_volume_surface(v.vertices, v.triangles, self.__project.volume_face_map)
         self.sessionChanged.emit()
 
     @Slot()

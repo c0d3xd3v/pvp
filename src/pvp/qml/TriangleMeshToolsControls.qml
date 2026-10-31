@@ -31,9 +31,9 @@ Item {
             id: tabBar
             Layout.fillWidth: true
             background: Item {}   // blend into the translucent sidebar
+            TabButton { text: "Input Data"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
             TabButton { text: "Boundaries"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
             TabButton { text: "Meshing"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
-            TabButton { text: "Input Data"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
         }
 
         StackLayout {
@@ -42,17 +42,80 @@ Item {
             Layout.fillWidth: true
             // only the active tab counts; StackLayout would use the tallest one
             Layout.preferredHeight: children[currentIndex] ? children[currentIndex].implicitHeight : 0
-            onCurrentIndexChanged: PreProcCtrl.setPickingEnabled(currentIndex === 0)
-            Component.onCompleted: PreProcCtrl.setPickingEnabled(currentIndex === 0)
+            onCurrentIndexChanged: PreProcCtrl.setPickingEnabled(currentIndex === 1)
+            Component.onCompleted: PreProcCtrl.setPickingEnabled(currentIndex === 1)
 
-            // Tab 1: Surface partitioning (BCs)
+            // Tab 1: overview of the input data (what the mesher gets)
+            GridLayout {
+                id: inputTab
+                columns: 2
+                columnSpacing: 12
+                rowSpacing: 6
+                property var info: meshToolsRoot.inputSummary
+
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: !inputTab.info.loaded
+                    opacity: 0.7
+                    text: "No input data loaded"
+                }
+
+                Label { visible: inputTab.info.loaded; text: "File"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideMiddle
+                    text: inputTab.info.name || "–"
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Vertices"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.loaded ? inputTab.info.vertices.toLocaleString(Qt.locale(), "f", 0) : ""
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Triangles"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.loaded ? inputTab.info.triangles.toLocaleString(Qt.locale(), "f", 0) : ""
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Solid (closed)"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.closed ? "Yes" : "No"
+                    color: inputTab.info.closed ? Material.color(Material.Green, Material.Shade300)
+                                                : Material.color(Material.Orange, Material.Shade300)
+                }
+
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: inputTab.info.loaded && !inputTab.info.closed
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    font.pixelSize: 12
+                    text: inputTab.info.openEdges + " open edges, "
+                          + inputTab.info.nonManifoldEdges + " non-manifold edges"
+                }
+            }
+
+            // Tab 2: Surface partitioning (BCs)
             ColumnLayout {
                 PartitionList {
                     Layout.fillWidth: true
                 }
             }
 
-            // Tab 2: BG mesh + Mesher
+            // Tab 3: BG mesh + Mesher
             ColumnLayout {
                 id: meshingTab
                 spacing: 8
@@ -227,68 +290,6 @@ Item {
                 }
             }
 
-            // Tab 3: overview of the input data (what the mesher gets)
-            GridLayout {
-                id: inputTab
-                columns: 2
-                columnSpacing: 12
-                rowSpacing: 6
-                property var info: meshToolsRoot.inputSummary
-
-                Label {
-                    Layout.columnSpan: 2
-                    Layout.fillWidth: true
-                    visible: !inputTab.info.loaded
-                    opacity: 0.7
-                    text: "No input data loaded"
-                }
-
-                Label { visible: inputTab.info.loaded; text: "File"; opacity: 0.7 }
-                Label {
-                    visible: inputTab.info.loaded
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    elide: Text.ElideMiddle
-                    text: inputTab.info.name || "–"
-                }
-
-                Label { visible: inputTab.info.loaded; text: "Vertices"; opacity: 0.7 }
-                Label {
-                    visible: inputTab.info.loaded
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: inputTab.info.loaded ? inputTab.info.vertices.toLocaleString(Qt.locale(), "f", 0) : ""
-                }
-
-                Label { visible: inputTab.info.loaded; text: "Triangles"; opacity: 0.7 }
-                Label {
-                    visible: inputTab.info.loaded
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: inputTab.info.loaded ? inputTab.info.triangles.toLocaleString(Qt.locale(), "f", 0) : ""
-                }
-
-                Label { visible: inputTab.info.loaded; text: "Solid (closed)"; opacity: 0.7 }
-                Label {
-                    visible: inputTab.info.loaded
-                    Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignRight
-                    text: inputTab.info.closed ? "Yes" : "No"
-                    color: inputTab.info.closed ? Material.color(Material.Green, Material.Shade300)
-                                                : Material.color(Material.Orange, Material.Shade300)
-                }
-
-                Label {
-                    Layout.columnSpan: 2
-                    Layout.fillWidth: true
-                    visible: inputTab.info.loaded && !inputTab.info.closed
-                    wrapMode: Text.WordWrap
-                    opacity: 0.7
-                    font.pixelSize: 12
-                    text: inputTab.info.openEdges + " open edges, "
-                          + inputTab.info.nonManifoldEdges + " non-manifold edges"
-                }
-            }
         }
     }
 }

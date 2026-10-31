@@ -15,7 +15,8 @@ def ctrl(unit_cube):
     c = PreProcCtrl(project, scene_ctrl=None, selection_ctrl=None)   # export needs no scene
     assert not c.canExportVolume()
     mesh = Mesh(vertices=P, triangles=F, tetrahedra=T)
-    project.start("cube", mesh, volume=mesh)
+    project.start("cube", mesh)
+    project.set_volume(mesh, np.arange(len(F)))
     return c, project, P, F
 
 

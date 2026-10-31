@@ -4,11 +4,12 @@ volume mesh, mesher parameters and UI settings. Layout (format_version 1):
 
     /            attrs: format, format_version, app_version, units
     /source      attrs: name; dataset "bytes" = original input file (optional)
-    /input       vertices, triangles: input surface that gets meshed (optional,
-                 missing = same as /surface)
     /surface     vertices (N,3) f8, triangles (M,3) i8, partition_ids (M,) i4
     /partitions/<id>   attrs: name, color
-    /volume      vertices, triangles, tetrahedra (optional)
+    /volume      vertices, triangles, tetrahedra, surface_faces (optional)
+                 surface_faces: per volume boundary triangle the /surface
+                 triangle whose partition it gets (missing in files where the
+                 surface *is* the volume boundary)
     /mesher      attrs: name; group "params" with one attr per parameter
     /settings    attrs: normal_angle, current_partition (0 = none), next_partition_id
 """
@@ -32,11 +33,10 @@ class ProjectState:
     next_partition_id: int = 1
     current_partition: int | None = None
     normal_angle: float = 10.0
-    input_vertices: np.ndarray | None = None
-    input_triangles: np.ndarray | None = None
     volume_vertices: np.ndarray | None = None
     volume_triangles: np.ndarray | None = None
     volume_tetrahedra: np.ndarray | None = None
+    volume_surface_faces: np.ndarray | None = None
     source_name: str = ""
     source_bytes: bytes | None = None
     mesher_name: str = ""
@@ -76,11 +76,6 @@ def save_project(path: str, state: ProjectState):
         _put(surf, "triangles", state.surface_triangles, np.int64)
         _put(surf, "partition_ids", state.partition_ids, np.int32)
 
-        if state.input_vertices is not None:
-            inp = f.create_group("input")
-            _put(inp, "vertices", state.input_vertices, np.float64)
-            _put(inp, "triangles", state.input_triangles, np.int64)
-
         parts = f.create_group("partitions")
         for p in state.partitions:
             g = parts.create_group(str(p.id))
@@ -92,6 +87,8 @@ def save_project(path: str, state: ProjectState):
             _put(vol, "vertices", state.volume_vertices, np.float64)
             _put(vol, "triangles", state.volume_triangles, np.int64)
             _put(vol, "tetrahedra", state.volume_tetrahedra, np.int64)
+            if state.volume_surface_faces is not None:
+                _put(vol, "surface_faces", state.volume_surface_faces, np.int64)
 
         if state.mesher_name:
             m = f.create_group("mesher")
@@ -131,15 +128,13 @@ def load_project(path: str) -> ProjectState:
              for pid, g in f["partitions"].items()),
             key=lambda p: p.id)
 
-        if "input" in f:
-            state.input_vertices = f["input"]["vertices"][()]
-            state.input_triangles = f["input"]["triangles"][()]
-
         if "volume" in f:
             vol = f["volume"]
             state.volume_vertices = vol["vertices"][()]
             state.volume_triangles = vol["triangles"][()]
             state.volume_tetrahedra = vol["tetrahedra"][()]
+            if "surface_faces" in vol:
+                state.volume_surface_faces = vol["surface_faces"][()]
 
         if "source" in f:
             state.source_name = str(f["source"].attrs["name"])

@@ -42,8 +42,14 @@ Item {
             Layout.fillWidth: true
             // only the active tab counts; StackLayout would use the tallest one
             Layout.preferredHeight: children[currentIndex] ? children[currentIndex].implicitHeight : 0
-            onCurrentIndexChanged: PreProcCtrl.setPickingEnabled(currentIndex === 1)
-            Component.onCompleted: PreProcCtrl.setPickingEnabled(currentIndex === 1)
+            // Input Data / Boundaries: the input surface (picked on in
+            // Boundaries); Meshing: the tet mesh once there is one
+            function applyTab() {
+                PreProcCtrl.setPickingEnabled(currentIndex === 1)
+                SceneCtrl.showVolume(currentIndex === 2)
+            }
+            onCurrentIndexChanged: applyTab()
+            Component.onCompleted: applyTab()
 
             // Tab 1: overview of the input data (what the mesher gets)
             GridLayout {

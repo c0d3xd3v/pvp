@@ -46,6 +46,7 @@ class SceneCtrl(QObject):
         self.__volume_clip_filter = None
         self.__clip = ClipPlane()
         self.__wireframe = False
+        self.__show_volume = False     # Meshing tab: the tet mesh instead of the input surface
         self.__partition_view = PartitionView(
             partitions,
             request_render=self.__render,
@@ -130,6 +131,7 @@ class SceneCtrl(QObject):
             if self.__clip.enabled:
                 self.__clip.set_enabled(True)
             self.__vtkitem.setSelectableActor(self.__actor)
+            self.__apply_visibility()
             self.__render()
 
     @scene_locked
@@ -142,6 +144,7 @@ class SceneCtrl(QObject):
     def add_volume_geometry(self, vertices, triangles):
         self.__add_role_actor("volume", _triangle_polydata(vertices, triangles),
                               color=(0.4, 0.6, 1.0), opacity=0.25, wireframe=True)
+        self.__apply_visibility()
 
     @scene_locked
     def add_volume_unstructured_mesh(self, vertices, tetrahedra):
@@ -182,11 +185,29 @@ class SceneCtrl(QObject):
         prop.SetEdgeColor(0.15, 0.25, 0.4)
         self.__role_actors["volume"] = actor
         self.__renderer().AddActor(actor)
+        self.__apply_visibility()
         self.__render()
 
     @scene_locked
     def add_background_geometry(self, mesh):
         self.__add_role_actor("background", _triangle_polydata(mesh.vertices, mesh.triangles), color=(0.2, 0.9, 0.3), opacity=0.4, wireframe=True)
+
+    def __apply_visibility(self):
+        """Either the input surface or, when requested and present, the volume."""
+        volume = self.__role_actors.get("volume")
+        show_volume = self.__show_volume and volume is not None
+        if volume is not None:
+            volume.SetVisibility(show_volume)
+        if self.__actor is not None:
+            self.__actor.SetVisibility(not show_volume)
+            self.__actor.preview_actor.SetVisibility(not show_volume)
+
+    @Slot(bool)
+    @scene_locked
+    def showVolume(self, show: bool):
+        self.__show_volume = bool(show)
+        self.__apply_visibility()
+        self.__render()
 
     @scene_locked
     def reset_view_toggles(self):

@@ -9,7 +9,7 @@ from pvp.fileio import project_h5
 from pvp.fileio.readers import read_surface, read_volume
 from pvp.model.mesh import Mesh
 from pvp.model.project import Project
-from pvp.services.boundary_transfer import BoundarySnapshot, apply_snapshot
+from pvp.services.boundary_transfer import closest_cells
 from pvp.services.export import DEFAULT_GROUP
 
 
@@ -19,10 +19,12 @@ def open_surface(project: Project, path: str, scale: float = 1.0):
 
 
 def open_volume(project: Project, path: str):
-    """A .vol/.msh carries surface + volume (+ boundary names): a new project
-    with one shared mesh, and partitions from the named boundaries."""
+    """A .vol/.msh carries surface + volume (+ boundary names): its boundary
+    is the input surface (same triangle order), partitions come from the
+    named boundaries."""
     mesh = read_volume(path)
-    project.start(Path(path).name, mesh, volume=mesh, source_path=path)
+    project.start(Path(path).name, mesh.surface_only(), source_path=path)
+    project.set_volume(mesh, np.arange(len(mesh.triangles)))
     for bc, name in mesh.bc_names.items():
         name = (name or "").strip()
         faces = np.flatnonzero(mesh.triangle_bcs == bc)
@@ -34,16 +36,18 @@ def open_volume(project: Project, path: str):
         project.partitions.assign_faces(faces, pid, record=False)
 
 
-def take_mesh_result(project: Project, vertices, triangles, tetrahedra,
-                     name: str, boundaries: BoundarySnapshot | None = None):
-    """A mesher result replaces the geometry: the surface is the tet
-    boundary, the volume the tet set. The input file and mesher parameters
-    stay. With `boundaries`, the partitions from before meshing are
-    transferred onto the new surface."""
+def take_mesh_result(project: Project, vertices, triangles, tetrahedra, face_map=None):
+    """A mesher result becomes the volume; the input surface and its
+    partitions stay. face_map (surface triangle per boundary triangle) is
+    computed when not given — the mesher worker does it off the GUI thread."""
     mesh = Mesh(vertices=vertices, triangles=triangles, tetrahedra=tetrahedra)
-    project.start(name, mesh, volume=mesh)
-    if boundaries is not None:
-        apply_snapshot(project, boundaries)
+    if face_map is None:
+        face_map = mesh_face_map(project.surface, mesh)
+    project.set_volume(mesh, face_map)
+
+
+def mesh_face_map(surface: Mesh, volume: Mesh):
+    return closest_cells(surface.vertices, surface.triangles, volume.vertices, volume.triangles)
 
 
 def add_bounding_box(project: Project):
@@ -70,13 +74,11 @@ def save_project_file(project: Project, path: str) -> str:
         mesher_name=project.mesher_name,
         mesher_params=dict(project.mesher_params),
     )
-    if project.input is not None and project.input is not surf:
-        state.input_vertices = project.input.vertices
-        state.input_triangles = project.input.triangles
     if project.volume is not None and project.volume.has_tetrahedra:
         state.volume_vertices = project.volume.vertices
         state.volume_triangles = project.volume.triangles
         state.volume_tetrahedra = project.volume.tetrahedra
+        state.volume_surface_faces = project.volume_face_map
     project_h5.save_project(path, state)
     return path
 
@@ -86,16 +88,18 @@ def open_project_file(project: Project, path: str):
     (the project is unchanged then)."""
     state = project_h5.load_project(path)
     surface = Mesh(vertices=state.surface_vertices, triangles=state.surface_triangles)
-    volume = None
+    volume, face_map = None, state.volume_surface_faces
     if state.has_volume:
         volume = Mesh(vertices=state.volume_vertices, triangles=state.volume_triangles,
                       tetrahedra=state.volume_tetrahedra)
-        if (np.array_equal(state.volume_vertices, state.surface_vertices)
-                and np.array_equal(state.volume_triangles, state.surface_triangles)):
-            surface = volume    # as after meshing / loading a .vol: one shared mesh
-    project.start(Path(path).stem, surface, volume=volume)
-    project.input = (Mesh(vertices=state.input_vertices, triangles=state.input_triangles)
-                     if state.input_vertices is not None else surface)
+        if face_map is None and np.array_equal(state.volume_triangles, state.surface_triangles):
+            # older files: the surface was the volume boundary itself
+            surface = volume.surface_only()
+            face_map = np.arange(len(volume.triangles))
+    project.start(Path(path).stem, surface)
+    if volume is not None:
+        project.set_volume(volume, face_map if face_map is not None
+                           else mesh_face_map(surface, volume))
     project.source_name, project.source_bytes = state.source_name, state.source_bytes
     project.mesher_name, project.mesher_params = state.mesher_name, dict(state.mesher_params)
     project.normal_angle = state.normal_angle

@@ -6,12 +6,12 @@ from PySide6.QtCore import Slot, Signal, QObject, QThread
 
 from pvp.meshing.FTetWildMesher import FTetWildMesher, MeshingCancelled
 from pvp.model.project import Project
-from pvp.services.boundary_transfer import BoundarySnapshot, snapshot_boundaries
+from pvp.services.boundary_transfer import closest_cells
 
 
 class _MeshingWorker(QObject):
     """Runs on a background QThread. Owns no VTK/GUI state."""
-    finished = Signal(bool, object)   # success, MeshingResult or None
+    finished = Signal(bool, object)   # success, (MeshingResult, face map) or None
     # stage label, fraction (NaN = indeterminate), max_energy (NaN outside the
     # optimization loop), v_num, t_num (-1 outside the optimization loop)
     progress = Signal(str, float, float, int, int)
@@ -28,7 +28,10 @@ class _MeshingWorker(QObject):
         try:
             result = self.__mesher.mesh(self.__V, self.__F, self.__params,
                                         progress=self.progress.emit)
-            self.finished.emit(True, result)
+            # Which input triangle each boundary triangle takes its partition from
+            self.progress.emit("Transferring boundaries", float("nan"), float("nan"), -1, -1)
+            face_map = closest_cells(self.__V, self.__F, result.vertices, result.triangles)
+            self.finished.emit(True, (result, face_map))
         except MeshingCancelled:
             print("Meshing cancelled by user")
             self.finished.emit(False, None)
@@ -52,7 +55,6 @@ class MeshingCtrl(QObject):
         self.__preproc_ctrl = preproc_ctrl
         self.__thread: QThread | None = None
         self.__worker: _MeshingWorker | None = None
-        self.__bc_snapshot: BoundarySnapshot | None = None
 
     @Slot(result='QVariantList')
     def getMeshers(self) -> list:
@@ -65,7 +67,7 @@ class MeshingCtrl(QObject):
             return []
         project = self.__project
         # Absolute-unit parameters get defaults relative to the model size
-        bbox_diag = project.input.bbox_diagonal() if project.input is not None else 0.0
+        bbox_diag = project.surface.bbox_diagonal() if project.surface is not None else 0.0
         # Prefill with the parameters of the last run on this geometry (also
         # restored from a project file), else the mesher's defaults.
         last = project.mesher_params if project.mesher_name == mesher_name else {}
@@ -88,9 +90,8 @@ class MeshingCtrl(QObject):
         m = self.__meshers.get(mesher_name)
         if m is None:
             return False
-        # Always mesh the input data, also when the project already holds a
-        # meshing result (re-meshing must not mesh the previous tet boundary)
-        surface = self.__project.input
+        # Always the input surface; a previous result is replaced
+        surface = self.__project.surface
         if surface is None:
             print("Meshing: no input data loaded")
             return False
@@ -116,10 +117,6 @@ class MeshingCtrl(QObject):
         # When the C++ QThread object is destroyed, forget our reference
         self.__thread.destroyed.connect(self.__on_thread_destroyed)
 
-        # Snapshot boundary assignments on the current surface so the new
-        # tet-mesher boundary can inherit them in __on_worker_finished.
-        self.__bc_snapshot = snapshot_boundaries(self.__project)
-
         self.meshingStarted.emit()
         self.__thread.start()
         return True
@@ -128,9 +125,7 @@ class MeshingCtrl(QObject):
     def __on_worker_finished(self, success: bool, result):
         # Runs on GUI thread (worker.finished → auto-queued).
         if success and result is not None:
-            # Replace project: surface = tet boundary, volume = tet set.
-            self.__preproc_ctrl.take_mesh_result(result, self.__bc_snapshot)
-        self.__bc_snapshot = None
+            self.__preproc_ctrl.take_mesh_result(*result)
         self.meshingFinished.emit(success)
         # No explicit cleanup — Qt handles it via the deleteLater chain above.
 

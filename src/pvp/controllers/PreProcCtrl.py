@@ -4,7 +4,6 @@ from pvp.fileio.formats import EXPORT_FORMATS
 from pvp.geometry.surface_check import surface_stats
 from pvp.model.project import Project
 from pvp.services import export, project_ops
-from pvp.services.boundary_transfer import BoundarySnapshot
 
 
 def _local_path(path: str) -> str:
@@ -70,11 +69,14 @@ class PreProcCtrl(QObject):
         print(f"Loaded project {file_path}")
         return ""
 
-    def take_mesh_result(self, result, boundaries: BoundarySnapshot | None):
-        """Called by MeshingCtrl when a mesher finished."""
+    def take_mesh_result(self, result, face_map):
+        """Called by MeshingCtrl when a mesher finished: the input surface and
+        the view stay, only the volume is replaced."""
         project_ops.take_mesh_result(self.__project, result.vertices, result.triangles,
-                                     result.tetrahedra, "meshed", boundaries)
-        self.__show_project(reset_view=False)
+                                     result.tetrahedra, face_map)
+        v = self.__project.volume
+        self.__scene_ctrl.add_volume_unstructured_mesh(v.vertices, v.tetrahedra)
+        self.sessionChanged.emit()
 
     @Slot()
     def createBackgroundMesh(self):
@@ -177,7 +179,7 @@ class PreProcCtrl(QObject):
     @Slot(result='QVariantMap')
     def getInputSummary(self) -> dict:
         """Size and closedness of the input data (what gets meshed)."""
-        mesh = self.__project.input
+        mesh = self.__project.surface
         if mesh is None:
             return {"loaded": False}
         if self.__input_stats[0] is not mesh:

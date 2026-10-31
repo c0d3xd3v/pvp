@@ -13,7 +13,8 @@ def meshed(unit_cube):
     P, T, F = unit_cube
     p = Project()
     mesh = Mesh(vertices=P, triangles=F, tetrahedra=T)
-    p.start("cube", mesh, volume=mesh)
+    p.start("cube", mesh)
+    p.set_volume(mesh, np.arange(len(F)))
     p.partitions.assign_faces([0, 1, 2], p.partitions.add("inlet"))
     p.partitions.assign_faces([3], p.partitions.add("wall"))
     p.mesher_name, p.mesher_params = "FloatTetwild", {"eps": 0.01}
@@ -56,7 +57,7 @@ def test_project_file_round_trip(meshed, tmp_path):
     assert path.endswith(".pvp")
     q = Project()
     project_ops.open_project_file(q, path)
-    assert q.surface is q.volume                   # one shared mesh, as before saving
+    assert np.array_equal(q.volume_face_map, meshed.volume_face_map)
     assert np.array_equal(q.partitions.ids_per_cell(), meshed.partitions.ids_per_cell())
     assert [(p.id, p.name) for p in q.partitions.all()] == [(1, "inlet"), (2, "wall")]
     assert q.partitions.current_id() == 2 and q.normal_angle == 22.0
@@ -76,28 +77,32 @@ def test_bounding_box(meshed):
     assert len(meshed.background.triangles) == 12
 
 
-def test_input_data_survives_meshing_and_project_file(unit_cube, tmp_path):
+def test_vol_input_is_the_boundary_surface(meshed, tmp_path):
     from pvp.geometry.surface_check import surface_stats
-    P, T, F = unit_cube
-    src = tmp_path / "cube.vol"
-    path, _ = export.export_volume(_meshed_cube(P, T, F), str(src), "vol")
+    path, _ = export.export_volume(meshed, str(tmp_path / "cube"), "vol")
     p = Project()
     project_ops.open_volume(p, path)
-    inp = p.input
-    assert not inp.has_tetrahedra and len(inp.triangles) == len(F)
-    assert len(inp.vertices) < len(P)                  # interior nodes dropped
-    assert surface_stats(inp.vertices, inp.triangles).closed
+    surf, vol = p.surface, p.volume
+    assert not surf.has_tetrahedra and len(surf.triangles) == len(vol.triangles)
+    assert len(surf.vertices) < len(vol.vertices)       # interior nodes dropped
+    assert surface_stats(surf.vertices, surf.triangles).closed
+    assert np.array_equal(p.volume_face_map, np.arange(len(vol.triangles)))
 
-    project_ops.take_mesh_result(p, P, F, T, "meshed")
-    assert p.input is inp                              # meshing keeps the input
+
+def test_meshing_keeps_input_and_partitions(meshed, unit_cube, tmp_path):
+    """Partitions stay on the input surface; a (re-)meshing result only gets
+    a face map through which export and saving carry them over."""
+    P, T, F = unit_cube
+    surface, ids = meshed.surface, meshed.partitions.ids_per_cell().copy()
+    flipped = F[::-1]                                  # same boundary, other order
+    project_ops.take_mesh_result(meshed, P, flipped, T)
+    assert meshed.surface is surface and np.array_equal(meshed.partitions.ids_per_cell(), ids)
+    assert np.array_equal(meshed.volume_partition_ids(), ids[::-1])
+    groups = export.build_export_mesh(meshed).bc_groups
+    inlet = next(g for g in groups if g.name == "inlet")
+    assert sorted(inlet.triangles) == sorted(len(F) - 1 - np.array([0, 1, 2]))
+
+    path = project_ops.save_project_file(meshed, str(tmp_path / "proj"))
     q = Project()
-    project_ops.open_project_file(q, project_ops.save_project_file(p, str(tmp_path / "proj")))
-    assert np.array_equal(q.input.vertices, inp.vertices)
-    assert np.array_equal(q.input.triangles, inp.triangles)
-
-
-def _meshed_cube(P, T, F):
-    p = Project()
-    mesh = Mesh(vertices=P, triangles=F, tetrahedra=T)
-    p.start("cube", mesh, volume=mesh)
-    return p
+    project_ops.open_project_file(q, path)
+    assert np.array_equal(q.volume_partition_ids(), ids[::-1])

@@ -11,10 +11,15 @@ Item {
     implicitHeight: toolsColumn.implicitHeight
 
     property var meshRoles: PreProcCtrl.getMeshRoles()
+    property var inputSummary: PreProcCtrl.getInputSummary()
 
     Connections {
         target: PreProcCtrl
-        function onSessionChanged() { meshRoles = PreProcCtrl.getMeshRoles() }
+        function onSessionChanged() {
+            meshRoles = PreProcCtrl.getMeshRoles()
+            inputSummary = PreProcCtrl.getInputSummary()
+        }
+        function onComponentsChanged() { inputSummary = PreProcCtrl.getInputSummary() }
     }
 
     ColumnLayout {
@@ -27,8 +32,9 @@ Item {
             id: tabBar
             Layout.fillWidth: true
             background: Item {}   // blend into the translucent sidebar
+            TabButton { text: "Input Data"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
             TabButton { text: "Boundaries"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
-            TabButton { text: "Meshing"; leftPadding: 10; rightPadding: 10 }
+            TabButton { text: "Meshing"; width: implicitWidth; leftPadding: 10; rightPadding: 10 }
         }
 
         StackLayout {
@@ -37,17 +43,147 @@ Item {
             Layout.fillWidth: true
             // only the active tab counts; StackLayout would use the tallest one
             Layout.preferredHeight: children[currentIndex] ? children[currentIndex].implicitHeight : 0
-            onCurrentIndexChanged: PreProcCtrl.setPickingEnabled(currentIndex === 0)
-            Component.onCompleted: PreProcCtrl.setPickingEnabled(currentIndex === 0)
+            // Input Data / Boundaries: the input surface (picked on in
+            // Boundaries); Meshing: the tet mesh once there is one
+            function applyTab() {
+                PreProcCtrl.setPickingEnabled(currentIndex === 1)
+                SceneCtrl.showVolume(currentIndex === 2)
+            }
+            onCurrentIndexChanged: applyTab()
+            Component.onCompleted: applyTab()
 
-            // Tab 1: Surface partitioning (BCs)
+            // Tab 1: overview of the input data (what the mesher gets)
+            GridLayout {
+                id: inputTab
+                columns: 2
+                columnSpacing: 12
+                rowSpacing: 6
+                property var info: meshToolsRoot.inputSummary
+
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: !inputTab.info.loaded
+                    opacity: 0.7
+                    text: "No input data loaded"
+                }
+
+                Label { visible: inputTab.info.loaded; text: "File"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideMiddle
+                    text: inputTab.info.name || "–"
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Vertices"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.loaded ? inputTab.info.vertices.toLocaleString(Qt.locale(), "f", 0) : ""
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Triangles"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.loaded ? inputTab.info.triangles.toLocaleString(Qt.locale(), "f", 0) : ""
+                }
+
+                Label { visible: inputTab.info.loaded; text: "Solid (closed)"; opacity: 0.7 }
+                Label {
+                    visible: inputTab.info.loaded
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignRight
+                    text: inputTab.info.closed ? "Yes" : "No"
+                    color: inputTab.info.closed ? Material.color(Material.Green, Material.Shade300)
+                                                : Material.color(Material.Orange, Material.Shade300)
+                }
+
+                Label {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    visible: inputTab.info.loaded && !inputTab.info.closed
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                    font.pixelSize: 12
+                    text: inputTab.info.openEdges + " open edges, "
+                          + inputTab.info.nonManifoldEdges + " non-manifold edges"
+                }
+
+                // Connected components; only the checked ones get meshed
+                RowLayout {
+                    Layout.columnSpan: 2
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    visible: inputTab.info.loaded
+                    Label {
+                        Layout.fillWidth: true
+                        text: "Components (" + (inputTab.info.components || []).length + ")"
+                        opacity: 0.7
+                    }
+                    Button {
+                        text: "All"; flat: true
+                        leftPadding: 6; rightPadding: 6
+                        onClicked: PreProcCtrl.setAllComponentsMeshed(true)
+                    }
+                    Button {
+                        text: "None"; flat: true
+                        leftPadding: 6; rightPadding: 6
+                        onClicked: PreProcCtrl.setAllComponentsMeshed(false)
+                    }
+                }
+
+                Repeater {
+                    model: inputTab.info.components || []
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        spacing: 4
+                        HoverHandler {
+                            onHoveredChanged: PreProcCtrl.previewComponent(hovered ? modelData.index : -1)
+                        }
+                        CheckBox {
+                            checked: modelData.meshed
+                            padding: 0
+                            onToggled: PreProcCtrl.setComponentMeshed(modelData.index, checked)
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: "Part " + (modelData.index + 1)
+                        }
+                        Label {
+                            opacity: 0.7
+                            text: modelData.triangles.toLocaleString(Qt.locale(), "f", 0) + " tris"
+                        }
+                        Label {
+                            Layout.preferredWidth: 18
+                            horizontalAlignment: Text.AlignRight
+                            text: modelData.closed ? "●" : "○"
+                            color: modelData.closed ? Material.color(Material.Green, Material.Shade300)
+                                                    : Material.color(Material.Orange, Material.Shade300)
+                            ToolTip.text: modelData.closed ? "closed"
+                                                           : modelData.openEdges + " open edges"
+                            ToolTip.visible: closedHover.hovered
+                            HoverHandler { id: closedHover }
+                        }
+                    }
+                }
+            }
+
+            // Tab 2: Surface partitioning (BCs)
             ColumnLayout {
                 PartitionList {
                     Layout.fillWidth: true
                 }
             }
 
-            // Tab 2: BG mesh + Mesher
+            // Tab 3: BG mesh + Mesher
             ColumnLayout {
                 id: meshingTab
                 spacing: 8
@@ -209,7 +345,8 @@ Item {
                     text: meshingTab.meshing ? "Cancel" : "Run"
                     Layout.fillWidth: true
                     enabled: meshingTab.meshing
-                             || (meshToolsRoot.meshRoles[0].loaded
+                             || (meshToolsRoot.inputSummary.loaded
+                                 && meshToolsRoot.inputSummary.components.some(c => c.meshed)
                                  && meshingTab.currentMesher !== "")
                     Material.background: meshingTab.meshing
                                          ? Material.color(Material.Red, Material.Shade700)
@@ -221,6 +358,7 @@ Item {
                     }
                 }
             }
+
         }
     }
 }

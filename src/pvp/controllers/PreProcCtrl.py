@@ -1,9 +1,10 @@
+import numpy as np
 from PySide6.QtCore import Slot, Signal, QObject, QUrl
 
 from pvp.fileio.formats import EXPORT_FORMATS
+from pvp.geometry.surface_check import component_stats, surface_stats
 from pvp.model.project import Project
 from pvp.services import export, project_ops
-from pvp.services.boundary_transfer import BoundarySnapshot
 
 
 def _local_path(path: str) -> str:
@@ -16,12 +17,14 @@ class PreProcCtrl(QObject):
     operations and shows the result in the scene."""
     sessionChanged = Signal()
     partitionsChanged = Signal()
+    componentsChanged = Signal()     # which input components get meshed
 
     def __init__(self, project: Project, scene_ctrl, selection_ctrl):
         super().__init__()
         self.__project = project
         self.__scene_ctrl = scene_ctrl
         self.__selection_ctrl = selection_ctrl
+        self.__input_stats = (None, None, None)   # (input mesh, SurfaceStats, per component)
         project.partitions.subscribe(self.__on_partitions_changed)
 
     def __on_partitions_changed(self, _ids_changed: bool, list_changed: bool):
@@ -37,9 +40,12 @@ class PreProcCtrl(QObject):
         self.__scene_ctrl.add_surface_geometry(p.surface.vertices, p.surface.triangles)
         self.__selection_ctrl.set_picking_enabled(True)
         self.__selection_ctrl.load_geometry(p.surface.vertices, p.surface.triangles)
+        self.__show_unmeshed()
         if p.volume is not None:
             if p.volume.has_tetrahedra:
                 self.__scene_ctrl.add_volume_unstructured_mesh(p.volume.vertices, p.volume.tetrahedra)
+                self.__scene_ctrl.add_volume_surface(p.volume.vertices, p.volume.triangles,
+                                                     p.volume_face_map)
             else:
                 self.__scene_ctrl.add_volume_geometry(p.volume.vertices, p.volume.triangles)
         self.sessionChanged.emit()
@@ -68,11 +74,15 @@ class PreProcCtrl(QObject):
         print(f"Loaded project {file_path}")
         return ""
 
-    def take_mesh_result(self, result, boundaries: BoundarySnapshot | None):
-        """Called by MeshingCtrl when a mesher finished."""
+    def take_mesh_result(self, result, face_map):
+        """Called by MeshingCtrl when a mesher finished: the input surface and
+        the view stay, only the volume is replaced."""
         project_ops.take_mesh_result(self.__project, result.vertices, result.triangles,
-                                     result.tetrahedra, "meshed", boundaries)
-        self.__show_project(reset_view=False)
+                                     result.tetrahedra, face_map)
+        v = self.__project.volume
+        self.__scene_ctrl.add_volume_unstructured_mesh(v.vertices, v.tetrahedra)
+        self.__scene_ctrl.add_volume_surface(v.vertices, v.triangles, self.__project.volume_face_map)
+        self.sessionChanged.emit()
 
     @Slot()
     def createBackgroundMesh(self):
@@ -171,6 +181,57 @@ class PreProcCtrl(QObject):
         print(f"Exported {path} ({format_key}, quadratic={quadratic}): "
               + ", ".join(f"{g.name} ({len(g.triangles)})" for g in mesh.bc_groups))
         return ""
+
+    @Slot(result='QVariantMap')
+    def getInputSummary(self) -> dict:
+        """Size and closedness of the input data (what gets meshed)."""
+        p = self.__project
+        mesh = p.surface
+        if mesh is None:
+            return {"loaded": False}
+        if self.__input_stats[0] is not mesh:
+            self.__input_stats = (mesh, surface_stats(mesh.vertices, mesh.triangles),
+                                  component_stats(mesh.triangles, p.surface_components))
+        _, s, parts = self.__input_stats
+        return {"loaded": True, "name": p.source_name,
+                "vertices": s.vertices, "triangles": s.triangles, "closed": s.closed,
+                "openEdges": s.open_edges, "nonManifoldEdges": s.nonmanifold_edges,
+                "components": [{"index": i, "triangles": c.triangles, "closed": c.closed,
+                                "openEdges": c.open_edges, "meshed": bool(p.meshed_components[i])}
+                               for i, c in enumerate(parts)]}
+
+    @Slot(int, bool)
+    def setComponentMeshed(self, index: int, meshed: bool):
+        flags = self.__project.meshed_components
+        if 0 <= index < len(flags) and flags[index] != meshed:
+            flags[index] = meshed
+            self.__components_changed()
+
+    @Slot(bool)
+    def setAllComponentsMeshed(self, meshed: bool):
+        self.__project.meshed_components[:] = meshed
+        self.__components_changed()
+
+    @Slot(int)
+    def previewComponent(self, index: int):
+        """Highlight one component in the view (-1: none)."""
+        labels = self.__project.surface_components
+        if index < 0 or labels is None:
+            self.__scene_ctrl.clear_preview()
+        else:
+            self.__scene_ctrl.preview_faces(np.flatnonzero(labels == index))
+
+    @Slot(result=bool)
+    def hasMeshedComponents(self) -> bool:
+        return bool(self.__project.meshed_components.any())
+
+    def __components_changed(self):
+        self.__show_unmeshed()
+        self.componentsChanged.emit()
+
+    def __show_unmeshed(self):
+        p = self.__project
+        self.__scene_ctrl.set_unmeshed_faces(np.flatnonzero(~p.meshed_components[p.surface_components]))
 
     @Slot(result='QVariantList')
     def getMeshRoles(self) -> list:

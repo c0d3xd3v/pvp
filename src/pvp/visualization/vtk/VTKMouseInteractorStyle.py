@@ -41,6 +41,9 @@ class VTKMouseInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         self.selectableActor = actor
         if polydata:
             self.mesh_polydata = polydata
+        elif getattr(actor, "full_polydata", None) is not None:
+            # all surface cells, also those the actor currently doesn't draw
+            self.mesh_polydata = actor.full_polydata
         elif actor:
             mapper = actor.GetMapper()
             if mapper:

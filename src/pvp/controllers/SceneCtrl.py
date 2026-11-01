@@ -46,6 +46,11 @@ class SceneCtrl(QObject):
         self.__volume_clip_filter = None
         self.__clip = ClipPlane()
         self.__wireframe = False
+        self.__show_volume = False     # Meshing tab: the tet mesh instead of the input surface
+        self.__partitions = partitions
+        self.__volume_face_map = None  # input triangle per volume boundary triangle
+        self.__unmeshed_faces = np.zeros(0, dtype=np.int64)   # drawn translucent, not meshed
+        partitions.subscribe(self.__on_partitions_changed)
         self.__partition_view = PartitionView(
             partitions,
             request_render=self.__render,
@@ -130,6 +135,8 @@ class SceneCtrl(QObject):
             if self.__clip.enabled:
                 self.__clip.set_enabled(True)
             self.__vtkitem.setSelectableActor(self.__actor)
+            self.__apply_unmeshed()
+            self.__apply_visibility()
             self.__render()
 
     @scene_locked
@@ -142,6 +149,7 @@ class SceneCtrl(QObject):
     def add_volume_geometry(self, vertices, triangles):
         self.__add_role_actor("volume", _triangle_polydata(vertices, triangles),
                               color=(0.4, 0.6, 1.0), opacity=0.25, wireframe=True)
+        self.__apply_visibility()
 
     @scene_locked
     def add_volume_unstructured_mesh(self, vertices, tetrahedra):
@@ -182,11 +190,95 @@ class SceneCtrl(QObject):
         prop.SetEdgeColor(0.15, 0.25, 0.4)
         self.__role_actors["volume"] = actor
         self.__renderer().AddActor(actor)
+        self.__apply_visibility()
         self.__render()
+
+    @scene_locked
+    def add_volume_surface(self, vertices, triangles, face_map):
+        """Boundary of the tet mesh, colored with the partitions carried over
+        from the input surface through face_map."""
+        if "volume_surface" in self.__role_actors:
+            self.__renderer().RemoveActor(self.__role_actors.pop("volume_surface"))
+        self.__volume_face_map = np.asarray(face_map, dtype=np.int64)
+        actor = FaceSelectionActor()
+        actor.SetPickable(False)
+        actor.setPolyData(_triangle_polydata(vertices, triangles),
+                          np.zeros(len(self.__volume_face_map), dtype=np.int32))
+        actor.enableEdges()
+        actor.GetProperty().SetEdgeColor(0.15, 0.15, 0.15)
+        self.__role_actors["volume_surface"] = actor
+        self.__update_volume_surface_colors()
+        if self.__clip.enabled:
+            actor.mapper.AddClippingPlane(self.__clip.plane)
+        self.__renderer().AddActor(actor)
+        self.__apply_visibility()
+        self.__render()
+
+    def __update_volume_surface_colors(self):
+        actor = self.__role_actors.get("volume_surface")
+        if actor is None:
+            return
+        ids = self.__partitions.ids_per_cell()
+        if ids is not None and len(self.__volume_face_map) and self.__volume_face_map.max() < len(ids):
+            actor.set_partition_ids(ids[self.__volume_face_map])
+        actor.set_partition_colors(self.__partitions.colors())
+
+    @scene_locked
+    def __on_partitions_changed(self, _ids_changed: bool, _list_changed: bool):
+        if "volume_surface" in self.__role_actors:
+            self.__update_volume_surface_colors()
+            self.__render()
 
     @scene_locked
     def add_background_geometry(self, mesh):
         self.__add_role_actor("background", _triangle_polydata(mesh.vertices, mesh.triangles), color=(0.2, 0.9, 0.3), opacity=0.4, wireframe=True)
+
+    @scene_locked
+    def set_unmeshed_faces(self, face_ids):
+        """Surface triangles of components that are not meshed: not drawn by
+        the surface actor but as a translucent grey overlay instead."""
+        self.__unmeshed_faces = np.asarray(face_ids, dtype=np.int64)
+        self.__apply_unmeshed()
+        self.__render()
+
+    def __apply_unmeshed(self):
+        if self.__actor is None or self.__actor.full_polydata is None:
+            return
+        pd = self.__actor.full_polydata
+        self.__actor.set_hidden_cells(self.__unmeshed_faces)
+
+        if "unmeshed" in self.__role_actors:
+            self.__renderer().RemoveActor(self.__role_actors.pop("unmeshed"))
+        if len(self.__unmeshed_faces):
+            overlay = vtk.vtkPolyData()
+            overlay.SetPoints(pd.GetPoints())
+            tris = self.__actor._face_connectivity[self.__unmeshed_faces]
+            conn = np.column_stack((np.full(len(tris), 3, dtype=np.int64), tris)).ravel()
+            cells = vtk.vtkCellArray()
+            cells.SetCells(len(tris), numpy_to_vtk(conn, deep=True, array_type=vtk.VTK_ID_TYPE))
+            overlay.SetPolys(cells)
+            self.__add_role_actor("unmeshed", overlay, color=(0.6, 0.6, 0.6),
+                                  opacity=0.25, wireframe=False)
+            self.__role_actors["unmeshed"].SetPickable(False)
+
+    def __apply_visibility(self):
+        """Either the input surface or, when requested and present, the volume
+        with its boundary surface."""
+        volume = self.__role_actors.get("volume")
+        show_volume = self.__show_volume and volume is not None
+        for role in ("volume", "volume_surface"):
+            if role in self.__role_actors:
+                self.__role_actors[role].SetVisibility(show_volume)
+        if self.__actor is not None:
+            self.__actor.SetVisibility(not show_volume)
+            self.__actor.preview_actor.SetVisibility(not show_volume)
+
+    @Slot(bool)
+    @scene_locked
+    def showVolume(self, show: bool):
+        self.__show_volume = bool(show)
+        self.__apply_visibility()
+        self.__render()
 
     @scene_locked
     def reset_view_toggles(self):

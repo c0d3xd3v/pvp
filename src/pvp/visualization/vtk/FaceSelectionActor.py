@@ -9,6 +9,7 @@ class FaceSelectionActor(vtk.vtkActor):
         self.current_mode = "cell"          # 'cell' or 'partition'
         self.lut = None
         self._face_connectivity = None      # Mx3 numpy array of point ids
+        self._hidden_cells = None           # drawn cells = all but these (None: all)
 
         self.mapper = vtk.vtkOpenGLPolyDataMapper()
         self.SetMapper(self.mapper)
@@ -131,11 +132,36 @@ class FaceSelectionActor(vtk.vtkActor):
             else:
                 self.full_polydata.GetCellData().SetActiveScalars("PartitionIds")
 
-        self.mapper.SetInputData(self.full_polydata)
+        self._connect_input()
         self.mapper.SetScalarModeToUseCellData()
         self.mapper.SetLookupTable(self.lut)
         # Range is always 0 .. num_entries-1 (LUT covers all)
         self.mapper.SetScalarRange(0, self.lut.GetNumberOfTableValues() - 1)
+        self.mapper.Modified()
+
+    def set_hidden_cells(self, face_ids):
+        """Don't draw these triangles. (VTK's OpenGL mapper ignores hidden
+        ghost cells, so the drawn cells are extracted instead; cell data such
+        as PartitionIds passes through and follows later updates.)"""
+        face_ids = np.asarray(face_ids, dtype=np.int64)
+        self._hidden_cells = face_ids if len(face_ids) else None
+        self._connect_input()
+
+    def _connect_input(self):
+        if self.full_polydata is None:
+            return
+        if self._hidden_cells is None:
+            self.mapper.SetInputData(self.full_polydata)
+        else:
+            keep = np.ones(self.full_polydata.GetNumberOfCells(), dtype=bool)
+            keep[self._hidden_cells] = False
+            cell_ids = np.flatnonzero(keep).astype(np.int64)
+            extract = vtk.vtkExtractCells()
+            extract.SetInputData(self.full_polydata)
+            extract.SetCellIds(cell_ids, len(cell_ids))
+            geometry = vtk.vtkGeometryFilter()
+            geometry.SetInputConnection(extract.GetOutputPort())
+            self.mapper.SetInputConnection(geometry.GetOutputPort())
         self.mapper.Modified()
 
     def set_preview(self, face_ids, color=(1.0, 1.0, 1.0)):

@@ -47,15 +47,20 @@ class SelectionCtrl(QObject):
     def __active(self) -> bool:
         return self.__picking_enabled and self.__graph is not None
 
+    def __meshed(self, face_id) -> bool:
+        """Faces of components that are not meshed can't take boundaries."""
+        p = self.__project
+        return p.surface_components is None or bool(p.meshed_components[p.surface_components[face_id]])
+
     def face_selected(self, face_id):
         pid = self.__project.partitions.current_id()
-        if self.__active() and pid is not None:
+        if self.__active() and pid is not None and self.__meshed(face_id):
             self.__project.partitions.assign_faces(self.__graph.region(face_id), pid)
 
     def face_deselected(self, face_id):
         """Right-click: clear the picked region from whatever partition it
         currently belongs to. Independent of which partition is selected."""
-        if self.__active():
+        if self.__active() and self.__meshed(face_id):
             self.__project.partitions.clear_faces(self.__graph.region(face_id))
 
     def face_hovered(self, face_id):
@@ -64,7 +69,7 @@ class SelectionCtrl(QObject):
         if face_id == self.__hover_cell:
             return
         self.__hover_cell = face_id
-        if face_id < 0 or not self.__active():
+        if face_id < 0 or not self.__active() or not self.__meshed(face_id):
             self.__hover_label = -1
             self.__scene_ctrl.clear_preview()
             return

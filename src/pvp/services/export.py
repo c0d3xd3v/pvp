@@ -10,11 +10,14 @@ from pvp.model.project import Project
 DEFAULT_GROUP = "default"   # unassigned triangles; read back as unassigned
 
 
-def collect_bc_groups(partitions: Partitions, n_triangles: int) -> list[BCGroup]:
+def collect_bc_groups(partitions: Partitions, n_triangles: int,
+                      ids: np.ndarray | None = None) -> list[BCGroup]:
     """One group per non-empty partition. Every triangle must end up in some
     group, otherwise the exported surface has holes; unassigned triangles go
-    into a "default" group."""
-    ids = partitions.ids_per_cell()
+    into a "default" group. ids: partition id per triangle (default: the
+    partitions' own, i.e. triangles of the surface)."""
+    if ids is None:
+        ids = partitions.ids_per_cell()
     if ids is None:
         return [BCGroup(DEFAULT_GROUP, np.arange(n_triangles, dtype=np.int64))]
     if len(ids) != n_triangles:
@@ -36,7 +39,8 @@ def collect_bc_groups(partitions: Partitions, n_triangles: int) -> list[BCGroup]
 def build_export_mesh(project: Project) -> ExportMesh:
     vol = project.volume
     return ExportMesh(nodes=vol.vertices, tets=vol.tetrahedra, surface_tri=vol.triangles,
-                      bc_groups=collect_bc_groups(project.partitions, len(vol.triangles)))
+                      bc_groups=collect_bc_groups(project.partitions, len(vol.triangles),
+                                                  project.volume_partition_ids()))
 
 
 def export_summary(project: Project) -> dict:
@@ -44,7 +48,8 @@ def export_summary(project: Project) -> dict:
     if not project.can_export_volume():
         return {"boundaries": 0, "unassigned": 0, "tets": 0}
     try:
-        groups = collect_bc_groups(project.partitions, len(project.volume.triangles))
+        groups = collect_bc_groups(project.partitions, len(project.volume.triangles),
+                                   project.volume_partition_ids())
     except ValueError:
         groups = []
     return {"boundaries": sum(g.name != DEFAULT_GROUP for g in groups),

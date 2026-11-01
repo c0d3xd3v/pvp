@@ -4,11 +4,16 @@ volume mesh, mesher parameters and UI settings. Layout (format_version 1):
 
     /            attrs: format, format_version, app_version, units
     /source      attrs: name; dataset "bytes" = original input file (optional)
-    /surface     vertices (N,3) f8, triangles (M,3) i8, partition_ids (M,) i4
+    /surface     vertices (N,3) f8, triangles (M,3) i8, partition_ids (M,) i4,
+                 components (M,) i4: connected component per triangle (optional)
     /partitions/<id>   attrs: name, color
-    /volume      vertices, triangles, tetrahedra (optional)
+    /volume      vertices, triangles, tetrahedra, surface_faces (optional)
+                 surface_faces: per volume boundary triangle the /surface
+                 triangle whose partition it gets (missing in files where the
+                 surface *is* the volume boundary)
     /mesher      attrs: name; group "params" with one attr per parameter
-    /settings    attrs: normal_angle, current_partition (0 = none), next_partition_id
+    /settings    attrs: normal_angle, current_partition (0 = none), next_partition_id,
+                 meshed_components (bool per component, optional)
 """
 from dataclasses import dataclass, field
 
@@ -26,6 +31,8 @@ class ProjectState:
     surface_vertices: np.ndarray
     surface_triangles: np.ndarray
     partition_ids: np.ndarray
+    surface_components: np.ndarray | None = None
+    meshed_components: np.ndarray | None = None
     partitions: list[Partition] = field(default_factory=list)
     next_partition_id: int = 1
     current_partition: int | None = None
@@ -33,6 +40,7 @@ class ProjectState:
     volume_vertices: np.ndarray | None = None
     volume_triangles: np.ndarray | None = None
     volume_tetrahedra: np.ndarray | None = None
+    volume_surface_faces: np.ndarray | None = None
     source_name: str = ""
     source_bytes: bytes | None = None
     mesher_name: str = ""
@@ -71,6 +79,8 @@ def save_project(path: str, state: ProjectState):
         _put(surf, "vertices", state.surface_vertices, np.float64)
         _put(surf, "triangles", state.surface_triangles, np.int64)
         _put(surf, "partition_ids", state.partition_ids, np.int32)
+        if state.surface_components is not None:
+            _put(surf, "components", state.surface_components, np.int32)
 
         parts = f.create_group("partitions")
         for p in state.partitions:
@@ -83,6 +93,8 @@ def save_project(path: str, state: ProjectState):
             _put(vol, "vertices", state.volume_vertices, np.float64)
             _put(vol, "triangles", state.volume_triangles, np.int64)
             _put(vol, "tetrahedra", state.volume_tetrahedra, np.int64)
+            if state.volume_surface_faces is not None:
+                _put(vol, "surface_faces", state.volume_surface_faces, np.int64)
 
         if state.mesher_name:
             m = f.create_group("mesher")
@@ -90,10 +102,13 @@ def save_project(path: str, state: ProjectState):
             m.create_group("params").attrs.update(
                 {k: float(v) for k, v in state.mesher_params.items()})
 
-        f.create_group("settings").attrs.update(
+        settings = f.create_group("settings")
+        settings.attrs.update(
             normal_angle=float(state.normal_angle),
             current_partition=int(state.current_partition or 0),
             next_partition_id=int(state.next_partition_id))
+        if state.meshed_components is not None:
+            settings.attrs["meshed_components"] = np.asarray(state.meshed_components, dtype=np.int8)
 
 
 def load_project(path: str) -> ProjectState:
@@ -112,6 +127,8 @@ def load_project(path: str) -> ProjectState:
             surface_triangles=surf["triangles"][()],
             partition_ids=surf["partition_ids"][()],
         )
+        if "components" in surf:
+            state.surface_components = surf["components"][()]
         if len(state.partition_ids) != len(state.surface_triangles):
             raise ValueError(f"{path}: {len(state.partition_ids)} partition ids for "
                              f"{len(state.surface_triangles)} surface triangles")
@@ -127,6 +144,8 @@ def load_project(path: str) -> ProjectState:
             state.volume_vertices = vol["vertices"][()]
             state.volume_triangles = vol["triangles"][()]
             state.volume_tetrahedra = vol["tetrahedra"][()]
+            if "surface_faces" in vol:
+                state.volume_surface_faces = vol["surface_faces"][()]
 
         if "source" in f:
             state.source_name = str(f["source"].attrs["name"])
@@ -140,4 +159,6 @@ def load_project(path: str) -> ProjectState:
         state.normal_angle = float(s["normal_angle"])
         state.current_partition = int(s["current_partition"]) or None
         state.next_partition_id = int(s["next_partition_id"])
+        if "meshed_components" in s:
+            state.meshed_components = np.asarray(s["meshed_components"], dtype=bool)
         return state

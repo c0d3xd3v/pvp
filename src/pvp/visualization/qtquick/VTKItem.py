@@ -165,7 +165,7 @@ class VTKItem(QQuickFramebufferObject):
         self.om = vtk.vtkCameraOrientationWidget()
         rep = self.om.GetRepresentation()
         rep.AnchorToLowerRight()
-        rep.SetSize(80, 80)
+        rep.SetSize(150, 150)
         rep.SetPadding(6, 6)
         self._timer_bridge = _InteractorTimerBridge(self)   # attached in object_created
         self._yflip = None

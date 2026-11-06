@@ -36,6 +36,33 @@ def test_read_surface_scales_to_mm(tmp_path, unit_cube):
     assert isinstance(read_mesh(path), Mesh)
 
 
+def _ascii_solid(name, V, F):
+    lines = [f"solid {name}"]
+    for tri in F:
+        lines += ["  facet normal 0 0 0", "    outer loop"]
+        lines += [f"      vertex {x} {y} {z}" for x, y, z in V[tri]]
+        lines += ["    endloop", "  endfacet"]
+    return "\n".join(lines + [f"endsolid {name}", ""])
+
+
+def test_read_surface_keeps_touching_solids_apart(tmp_path):
+    """Two boxes sharing a face, one solid each: they must stay two
+    components with all their triangles (contact faces included)."""
+    from pvp.geometry.surface_check import component_labels
+    V = np.array([[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], dtype=float)
+    F = np.array([[0, 2, 1], [1, 2, 3], [4, 5, 6], [5, 7, 6], [0, 1, 4], [1, 5, 4],
+                  [2, 6, 3], [3, 6, 7], [0, 4, 2], [2, 4, 6], [1, 3, 5], [3, 7, 5]])
+    path = tmp_path / "two.stl"
+    path.write_text(_ascii_solid("a", V, F) + _ascii_solid("b", V + [0, 0, 1], F))
+    m = read_surface(str(path))
+    assert len(m.triangles) == 24 and len(m.vertices) == 16
+    assert component_labels(m.triangles).max() == 1
+
+    one = tmp_path / "one.stl"      # a single solid: coincident vertices still merge
+    one.write_text(_ascii_solid("a", np.vstack([V, V + [0, 0, 1]]), np.vstack([F, F + 8])))
+    assert len(read_surface(str(one)).vertices) == 12
+
+
 def test_bounding_box_is_closed_and_consistently_oriented(unit_cube):
     P, *_ = unit_cube
     box = bounding_box_mesh(P, scale=1.0)

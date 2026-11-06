@@ -21,13 +21,52 @@ def _c_numeric_locale():
         locale.setlocale(locale.LC_NUMERIC, old)
 
 
+def _ascii_stl_solid_sizes(path: str, n_faces: int) -> list[int] | None:
+    """Facets per `solid ... endsolid` block of an ASCII STL, in file order;
+    None for binary STL, other formats, or when the counts don't add up."""
+    if not path.lower().endswith(".stl"):
+        return None
+    with open(path, "rb") as f:
+        data = f.read()
+    if not data.lstrip().startswith(b"solid") or b"endsolid" not in data[-4096:]:
+        return None             # binary (its header may also start with "solid")
+    sizes = [chunk.count(b"endfacet") for chunk in data.split(b"endsolid")[:-1]]
+    return sizes if sum(sizes) == n_faces else None
+
+
+def _merge_vertices_per_block(sv, sf, sizes):
+    """Merge coincident vertices only within each block of faces, so bodies
+    that touch (an assembly exported part by part) stay separate components
+    instead of fusing along shared edges."""
+    import igl
+    Vs, Fs, offset, start = [], [], 0, 0
+    for n in sizes:
+        faces = sf[start:start + n]
+        start += n
+        if n == 0:
+            continue
+        used, local = np.unique(faces, return_inverse=True)
+        V, _, _, F = igl.remove_duplicate_vertices(sv[used], local.reshape(-1, 3), epsilon=1e-7)
+        Vs.append(V)
+        Fs.append(F + offset)
+        offset += len(V)
+    return np.vstack(Vs), np.vstack(Fs)
+
+
 def read_surface(path: str, scale: float = 1.0) -> Mesh:
     """STL/OBJ. These carry no units: the user picks one when opening and
-    `scale` converts to mm, so everything downstream sees mm."""
+    `scale` converts to mm, so everything downstream sees mm.
+
+    Coincident vertices are merged; in an ASCII STL with several solids only
+    within each solid, so touching parts don't fuse into one."""
     import igl      # ~0.3 s
     with _c_numeric_locale():
         sv, sf = igl.read_triangle_mesh(path)
-        V, _, _, F = igl.remove_duplicate_vertices(sv, sf, epsilon=1e-7)
+        sizes = _ascii_stl_solid_sizes(path, len(sf))
+        if sizes and len(sizes) > 1:
+            V, F = _merge_vertices_per_block(sv, sf, sizes)
+        else:
+            V, _, _, F = igl.remove_duplicate_vertices(sv, sf, epsilon=1e-7)
     return Mesh(vertices=V * float(scale), triangles=F)
 
 

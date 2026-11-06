@@ -31,6 +31,7 @@ jobs:
           submodules: recursive
 
       - uses: actions/setup-python@v7
+        id: setup-python
         with:
           python-version: "3.12"
           cache: pip
@@ -71,7 +72,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: external/floattetwild-wrapper/build
-          key: ftw-${{ runner.os }}-${{ hashFiles('external/floattetwild-wrapper/CMakeLists.txt', 'external/floattetwild-wrapper/cmake/**', 'external/floattetwild-wrapper/src/**', 'external/fTetWild/CMakeLists.txt', 'external/fTetWild/cmake/**', 'external/fTetWild/src/**') }}
+          # The exact Python version is in the key: CMakeCache.txt stores the
+          # interpreter path, which breaks when the runner's patch release moves.
+          key: ftw-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('external/floattetwild-wrapper/CMakeLists.txt', 'external/floattetwild-wrapper/cmake/**', 'external/floattetwild-wrapper/src/**', 'external/fTetWild/CMakeLists.txt', 'external/fTetWild/cmake/**', 'external/fTetWild/src/**') }}
 
       - name: Build fTetWild module
         shell: bash

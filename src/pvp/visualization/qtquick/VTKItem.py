@@ -165,8 +165,7 @@ class VTKItem(QQuickFramebufferObject):
         self.om = vtk.vtkCameraOrientationWidget()
         rep = self.om.GetRepresentation()
         rep.AnchorToLowerRight()
-        rep.SetSize(150, 150)
-        rep.SetPadding(6, 6)
+        self._gizmo_dpr = None      # size/padding set per DPR in _scale_gizmo
         self._timer_bridge = _InteractorTimerBridge(self)   # attached in object_created
         self._yflip = None
 
@@ -202,6 +201,7 @@ class VTKItem(QQuickFramebufferObject):
             # Qt accepts self.update().
             self.om.SetParentRenderer(renderer)
             self.om.SetInteractor(self.interactor)
+            self._scale_gizmo(self.window().devicePixelRatio())
             self._timer_bridge.attach(self.interactor)
             self._yflip = _GizmoYFlipGuard(self.interactor, self.om, active=False)
             self.om.On()
@@ -335,10 +335,34 @@ class VTKItem(QQuickFramebufferObject):
             self.renderer.renderer.RemoveActor(actor)
             actor = actors.GetNextItem()
 
+    # Gizmo size in logical (device-independent) pixels; 75 matches the
+    # 150 device px tuned at DPR 2.
+    GIZMO_SIZE = 75
+    GIZMO_PADDING = 3
+
+    def _scale_gizmo(self, dpr: float):
+        """The FBO renders in device pixels, so the gizmo's size and padding
+        are scaled by the DPR to look the same on every screen. Re-run when
+        the window moves to a screen with a different DPR."""
+        if dpr == self._gizmo_dpr:
+            return
+        self._gizmo_dpr = dpr
+        rep = self.om.GetRepresentation()
+        size = round(self.GIZMO_SIZE * dpr)
+        pad = round(self.GIZMO_PADDING * dpr)
+        rep.SetSize(size, size)
+        rep.SetPadding(pad, pad)
+        if self.om.GetParentRenderer() is not None:
+            self.om.SquareResize()      # recompute the gizmo's viewport now
+
     def updatePaintNode(self, node, inOutData):
         pixel_ratio = self.window().devicePixelRatio()
         self.mouse_interactor.set_pixel_ratio(pixel_ratio)
-        return QQuickFramebufferObject.updatePaintNode(self, node, inOutData)
+        result = QQuickFramebufferObject.updatePaintNode(self, node, inOutData)
+        # GUI thread is blocked here, so touching VTK state is safe.
+        if self.renderer is not None:
+            self._scale_gizmo(pixel_ratio)
+        return result
 
     @Slot(bool)
     def setGizmoYFlip(self, enabled: bool):

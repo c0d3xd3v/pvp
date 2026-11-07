@@ -1,42 +1,38 @@
 import traceback
 
-import numpy as np
-
 from PySide6.QtCore import Slot, Signal, QObject, QThread
 
 from pvp.meshing.FTetWildMesher import FTetWildMesher, MeshingCancelled
-from pvp.model.mesh import Mesh
 from pvp.model.project import Project
-from pvp.services.boundary_transfer import closest_cells
+from pvp.services import multibody
 
 
 class _MeshingWorker(QObject):
     """Runs on a background QThread. Owns no VTK/GUI state."""
-    finished = Signal(bool, object)   # success, (MeshingResult, face map) or None
+    finished = Signal(bool, object)   # success, (MeshingResult, face map, regions) or None
     # stage label, fraction (NaN = indeterminate), max_energy (NaN outside the
     # optimization loop), v_num, t_num (-1 outside the optimization loop)
     progress = Signal(str, float, float, int, int)
 
-    def __init__(self, mesher, vertices, triangles, surface_faces, params):
-        """vertices/triangles: what gets meshed; surface_faces: the input
-        surface triangle of each of these triangles."""
+    def __init__(self, mesher, surface, bodies, params, mode):
+        """surface: the input surface; bodies: [(component label, its
+        triangles)] that get meshed; mode: see services/multibody.py."""
         super().__init__()
         self.__mesher = mesher
-        self.__V = vertices
-        self.__F = triangles
-        self.__surface_faces = surface_faces
+        self.__surface = surface
+        self.__bodies = bodies
         self.__params = params
+        self.__mode = mode
+        self.cancel_requested = False   # set from the GUI thread, polled between runs
 
     @Slot()
     def run(self):
         try:
-            result = self.__mesher.mesh(self.__V, self.__F, self.__params,
-                                        progress=self.progress.emit)
-            # Which input triangle each boundary triangle takes its partition from
-            self.progress.emit("Transferring boundaries", float("nan"), float("nan"), -1, -1)
-            face_map = self.__surface_faces[
-                closest_cells(self.__V, self.__F, result.vertices, result.triangles)]
-            self.finished.emit(True, (result, face_map))
+            result = multibody.mesh_bodies(
+                self.__mesher, self.__surface.vertices, self.__surface.triangles,
+                self.__bodies, self.__params, self.__mode,
+                progress=self.progress.emit, cancelled=lambda: self.cancel_requested)
+            self.finished.emit(True, result)
         except MeshingCancelled:
             print("Meshing cancelled by user")
             self.finished.emit(False, None)
@@ -86,8 +82,12 @@ class MeshingCtrl(QObject):
             "tooltip": p.tooltip,
         } for p in m.param_schema(bbox_diag or None)]
 
-    @Slot(str, 'QVariantMap', result=bool)
-    def runMesher(self, mesher_name: str, params) -> bool:
+    @Slot(result=str)
+    def getMeshMode(self) -> str:
+        return self.__project.mesh_mode
+
+    @Slot(str, 'QVariantMap', str, result=bool)
+    def runMesher(self, mesher_name: str, params, mode: str = multibody.CONFORMING) -> bool:
         if self.__thread is not None and self.__thread.isRunning():
             print("Meshing: already running")
             return False
@@ -101,21 +101,22 @@ class MeshingCtrl(QObject):
         if surface is None:
             print("Meshing: no input data loaded")
             return False
-        faces = self.__project.meshed_faces()
-        if len(faces) == 0:
+        project = self.__project
+        bodies = multibody.body_faces(project.surface_components, project.meshed_components)
+        if not bodies:
             print("Meshing: no component selected")
             return False
+        if mode not in multibody.MESH_MODES:
+            mode = multibody.CONFORMING
 
-        part = Mesh(vertices=surface.vertices, triangles=surface.triangles[faces]).surface_only()
-        V = part.vertices
-        F = part.triangles.astype(np.int32)
         param_dict = {k: float(v) for k, v in dict(params).items()}
-        print(f"Meshing: {mesher_name} params={param_dict}")
-        self.__project.mesher_name = mesher_name
-        self.__project.mesher_params = dict(param_dict)
+        print(f"Meshing: {mesher_name} params={param_dict} bodies={len(bodies)} mode={mode}")
+        project.mesher_name = mesher_name
+        project.mesher_params = dict(param_dict)
+        project.mesh_mode = mode
 
         self.__thread = QThread()
-        self.__worker = _MeshingWorker(m, V, F, faces, param_dict)
+        self.__worker = _MeshingWorker(m, surface, bodies, param_dict, mode)
         self.__worker.moveToThread(self.__thread)
 
         # Wiring — Qt manages cleanup via deleteLater so we never block GUI thread.
@@ -159,6 +160,8 @@ class MeshingCtrl(QObject):
         """
         if self.__thread is None or not self.__thread.isRunning():
             return False
+        if self.__worker is not None:
+            self.__worker.cancel_requested = True
         for m in self.__meshers.values():
             # Each mesher ignores the request when it isn't the one running.
             try:

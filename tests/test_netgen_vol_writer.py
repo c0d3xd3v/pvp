@@ -81,3 +81,20 @@ def test_triangle_not_on_a_tet_is_rejected(tmp_path, unit_cube):
         write_vol(str(tmp_path / "bad.vol"),
                   ExportMesh(nodes=P, tets=T, surface_tri=bad,
                              bc_groups=[BCGroup("x", np.array([0]))]))
+
+
+def test_regions_become_domains(tmp_path, two_cubes):
+    import netgen.meshing as nm
+    V, T, F, regions = two_cubes
+    groups = [BCGroup("all", np.arange(len(F)))]
+    path = str(tmp_path / "two.vol")
+    write_vol(path, ExportMesh(nodes=V, tets=T, surface_tri=F, bc_groups=groups,
+                               regions=regions, region_names=["Part_1", "Part_2"]))
+    m = nm.Mesh(dim=3)
+    m.Load(path)
+    assert [m.GetMaterial(d) for d in (1, 2)] == ["Part_1", "Part_2"]
+    mesh = ngs.Mesh(m)
+    for d, name in ((1, "Part_1"), (2, "Part_2")):
+        assert ngs.Integrate(1, mesh, definedon=mesh.Materials(name)) == pytest.approx(1.0)
+    assert set(mesh.GetBoundaries()) == {"all"}
+    assert ngs.Integrate(1, mesh, ngs.BND) == pytest.approx(12.0)

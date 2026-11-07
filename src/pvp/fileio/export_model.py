@@ -29,11 +29,41 @@ class ExportMesh:
     tets: np.ndarray             # (K, 4) int, 0-based linear-tet connectivity
     surface_tri: np.ndarray      # (M, 3) int, 0-based boundary triangle vertices
     bc_groups: list[BCGroup] = field(default_factory=list)
+    # Volume regions (bodies): index into region_names per tet. None = one
+    # region named VOLUME_NAME (what single-body exports have always written).
+    regions: np.ndarray | None = None
+    region_names: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         self.nodes = np.ascontiguousarray(self.nodes, dtype=np.float64)
         self.tets = np.ascontiguousarray(self.tets, dtype=np.int64)
         self.surface_tri = np.ascontiguousarray(self.surface_tri, dtype=np.int64)
+        if self.regions is not None:
+            self.regions = np.ascontiguousarray(self.regions, dtype=np.int64).ravel()
+            if len(self.regions) != len(self.tets):
+                raise ValueError(f"{len(self.regions)} regions for {len(self.tets)} tets")
+            if len(self.regions) and (self.regions.min() < 0
+                                      or self.regions.max() >= len(self.region_names)):
+                raise ValueError("region index out of range of region_names")
+
+    def region_groups(self) -> list[tuple[str, np.ndarray]]:
+        """(name, tet indices) per non-empty region, in region order."""
+        if self.regions is None:
+            return [(VOLUME_NAME, np.arange(len(self.tets), dtype=np.int64))]
+        groups = [(name, np.flatnonzero(self.regions == i))
+                  for i, name in enumerate(self.region_names)]
+        return [(name, tets) for name, tets in groups if len(tets)]
+
+    def surface_regions(self) -> np.ndarray:
+        """Region index of the tet each surface triangle is a face of
+        (all 0 without regions)."""
+        if self.regions is None:
+            return np.zeros(len(self.surface_tri), dtype=np.int64)
+        from pvp.services.multibody import boundary_regions
+        return boundary_regions(self.tets, self.regions, self.surface_tri).astype(np.int64)
+
+
+VOLUME_NAME = "Volume"
 
 
 # Canonical local-edge layout for the midside columns of our Tet10 arrays.

@@ -140,3 +140,28 @@ def test_abaqus_structure_and_surface_qualified(tmp_path, cube_mesh):
         )
         for line in m.group(1).strip().splitlines():
             assert line.startswith(f"{_INSTANCE_NAME}."), line
+
+
+def test_regions_become_element_sets(tmp_path, two_cubes):
+    V, T, F, regions = two_cubes
+    mesh = ExportMesh(nodes=V, tets=T, surface_tri=F, bc_groups=[BCGroup("all", np.arange(len(F)))],
+                      regions=regions, region_names=["Part_1", "Part_2"])
+    path = tmp_path / "two.inp"
+    write_inp_calculix(str(path), mesh)
+    text = _read_text(path)
+    for name, label in (("Part_1", 0), ("Part_2", 1)):
+        block = re.search(rf"\*ELEMENT, TYPE=C3D4, ELSET={name}\n(.*?)(?=\n\*)", text, re.DOTALL)
+        ids = [int(line.split(",")[0]) for line in block.group(1).splitlines()]
+        assert ids == (np.flatnonzero(regions == label) + 1).tolist()
+    assert "*ELSET, ELSET=Volume\nPart_1, Part_2\n" in text
+    # *SURFACE refers to the same element ids as before
+    assert len(_parse_surface(text, "all")) == len(F)
+    m = meshio.read(str(path))
+    assert sum(len(cb.data) for cb in m.cells if cb.type == "tetra") == len(T)
+
+
+def test_single_region_output_unchanged(tmp_path, cube_mesh):
+    path = tmp_path / "cube.inp"
+    write_inp_calculix(str(path), cube_mesh)
+    text = _read_text(path)
+    assert text.count("*ELEMENT") == 1 and "ELSET=Volume\n" in text and "*ELSET" not in text

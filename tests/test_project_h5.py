@@ -57,3 +57,16 @@ def test_rejects_foreign_and_newer_files(tmp_path, state):
         f.attrs["format_version"] = 99
     with pytest.raises(ValueError, match="v99"):
         load_project(str(newer))
+
+
+def test_regions_and_mesh_mode_round_trip(tmp_path, state):
+    path = tmp_path / "p.pvp"
+    save_project(str(path), state)
+    got = load_project(str(path))
+    assert got.volume_regions is None and got.mesh_mode == "conforming"   # optional fields
+    state.volume_regions = np.arange(len(state.volume_tetrahedra), dtype=np.int32) % 2
+    state.mesh_mode = "per_body"
+    save_project(str(path), state)
+    got = load_project(str(path))
+    assert np.array_equal(got.volume_regions, state.volume_regions)
+    assert got.mesh_mode == "per_body"

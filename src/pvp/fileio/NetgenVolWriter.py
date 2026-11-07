@@ -48,15 +48,31 @@ def write_vol(path: str, mesh: ExportMesh):
     # nm.Pnt: Point3d was removed in newer netgen releases (e.g. 6.2.2608)
     pids = [out.Add(nm.MeshPoint(nm.Pnt(*p))) for p in P]
 
+    # Domains 1..R, one per region; a boundary face descriptor per
+    # (BC, domain) pair, since each face descriptor has a single domin.
+    regions = mesh.regions if mesh.regions is not None else np.zeros(len(T), dtype=np.int64)
+    used = [i for i in range(max(len(mesh.region_names), 1)) if np.any(regions == i)]
+    domain = {r: d + 1 for d, r in enumerate(used)}
+    tri_region = mesh.surface_regions()
+    surfnr = 0
     for i, g in enumerate(mesh.bc_groups):
-        fd = out.Add(nm.FaceDescriptor(bc=i + 1, domin=1, domout=0, surfnr=i + 1))
+        tris = np.asarray(g.triangles, dtype=np.int64)
+        for r in np.unique(tri_region[tris]):
+            surfnr += 1
+            fd = out.Add(nm.FaceDescriptor(bc=i + 1, domin=domain[int(r)], domout=0,
+                                           surfnr=surfnr))
+            for k in tris[tri_region[tris] == r]:
+                out.Add(nm.Element2D(fd, [pids[v] for v in F[k]]))
+    for i, g in enumerate(mesh.bc_groups):
         # SetBCName is 0-based (index into netgen's names array) even though
-        # bc numbers themselves are 1-based.
+        # bc numbers themselves are 1-based; it names every face descriptor
+        # with that bc number.
         out.SetBCName(i, g.name)
-        for k in g.triangles:
-            out.Add(nm.Element2D(fd, [pids[v] for v in F[k]]))
 
-    for t in T:
-        out.Add(nm.Element3D(1, [pids[v] for v in t]))
+    for t, r in zip(T, regions):
+        out.Add(nm.Element3D(domain[int(r)], [pids[v] for v in t]))
+    if mesh.regions is not None:
+        for r, d in domain.items():
+            out.SetMaterial(d, mesh.region_names[r])
 
     out.Save(path)

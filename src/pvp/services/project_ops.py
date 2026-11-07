@@ -9,6 +9,7 @@ from pvp.fileio import project_h5
 from pvp.fileio.readers import read_surface, read_volume
 from pvp.model.mesh import Mesh
 from pvp.model.project import Project
+from pvp.services import multibody
 from pvp.services.boundary_transfer import closest_cells
 from pvp.services.export import DEFAULT_GROUP
 
@@ -36,22 +37,31 @@ def open_volume(project: Project, path: str):
         project.partitions.assign_faces(faces, pid, record=False)
 
 
-def take_mesh_result(project: Project, vertices, triangles, tetrahedra, face_map=None):
+def take_mesh_result(project: Project, vertices, triangles, tetrahedra, face_map=None,
+                     regions=None):
     """A mesher result becomes the volume; the input surface and its
     partitions stay. face_map (surface triangle per boundary triangle) is
-    computed when not given — the mesher worker does it off the GUI thread."""
+    computed when not given — the mesher worker does it off the GUI thread.
+    regions: body per tet (None: a single region)."""
     mesh = Mesh(vertices=vertices, triangles=triangles, tetrahedra=tetrahedra)
     if face_map is None:
-        face_map = mesh_face_map(project, mesh)
-    project.set_volume(mesh, face_map)
+        face_map = mesh_face_map(project, mesh, regions)
+    project.set_volume(mesh, face_map, regions)
 
 
-def mesh_face_map(project: Project, volume: Mesh) -> np.ndarray:
+def mesh_face_map(project: Project, volume: Mesh, regions=None) -> np.ndarray:
     """Closest surface triangle (of the meshed components) per volume
-    boundary triangle."""
+    boundary triangle; with regions only among the triangles of the body
+    the boundary triangle belongs to."""
     faces = project.meshed_faces()
     surf = project.surface
-    return faces[closest_cells(surf.vertices, surf.triangles[faces], volume.vertices, volume.triangles)]
+    if regions is None:
+        return faces[closest_cells(surf.vertices, surf.triangles[faces],
+                                   volume.vertices, volume.triangles)]
+    bodies = multibody.body_faces(project.surface_components, project.meshed_components)
+    tri_label = multibody.boundary_regions(volume.tetrahedra, regions, volume.triangles)
+    return multibody.face_map_per_body(surf.vertices, surf.triangles, bodies,
+                                       volume.vertices, volume.triangles, tri_label)
 
 
 def add_bounding_box(project: Project):
@@ -79,12 +89,14 @@ def save_project_file(project: Project, path: str) -> str:
         source_bytes=project.source_bytes,
         mesher_name=project.mesher_name,
         mesher_params=dict(project.mesher_params),
+        mesh_mode=project.mesh_mode,
     )
     if project.volume is not None and project.volume.has_tetrahedra:
         state.volume_vertices = project.volume.vertices
         state.volume_triangles = project.volume.triangles
         state.volume_tetrahedra = project.volume.tetrahedra
         state.volume_surface_faces = project.volume_face_map
+        state.volume_regions = project.volume_regions
     project_h5.save_project(path, state)
     return path
 
@@ -106,10 +118,14 @@ def open_project_file(project: Project, path: str):
     if state.surface_components is not None and state.meshed_components is not None:
         project.set_components(state.surface_components, state.meshed_components)
     if volume is not None:
+        regions = state.volume_regions
+        if regions is not None and len(regions) != len(volume.tetrahedra):
+            regions = None      # inconsistent file: fall back to a single region
         project.set_volume(volume, face_map if face_map is not None
-                           else mesh_face_map(project, volume))
+                           else mesh_face_map(project, volume, regions), regions)
     project.source_name, project.source_bytes = state.source_name, state.source_bytes
     project.mesher_name, project.mesher_params = state.mesher_name, dict(state.mesher_params)
+    project.mesh_mode = state.mesh_mode
     project.normal_angle = state.normal_angle
     project.partitions.restore(state.partitions, state.partition_ids,
                                state.next_partition_id, state.current_partition)

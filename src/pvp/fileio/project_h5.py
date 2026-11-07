@@ -11,9 +11,11 @@ volume mesh, mesher parameters and UI settings. Layout (format_version 1):
                  surface_faces: per volume boundary triangle the /surface
                  triangle whose partition it gets (missing in files where the
                  surface *is* the volume boundary)
+                 regions (optional): body (surface component) per tet
     /mesher      attrs: name; group "params" with one attr per parameter
     /settings    attrs: normal_angle, current_partition (0 = none), next_partition_id,
-                 meshed_components (bool per component, optional)
+                 meshed_components (bool per component, optional),
+                 mesh_mode ("conforming" / "per_body", optional)
 """
 from dataclasses import dataclass, field
 
@@ -41,10 +43,12 @@ class ProjectState:
     volume_triangles: np.ndarray | None = None
     volume_tetrahedra: np.ndarray | None = None
     volume_surface_faces: np.ndarray | None = None
+    volume_regions: np.ndarray | None = None
     source_name: str = ""
     source_bytes: bytes | None = None
     mesher_name: str = ""
     mesher_params: dict = field(default_factory=dict)
+    mesh_mode: str = "conforming"
 
     @property
     def has_volume(self) -> bool:
@@ -95,6 +99,8 @@ def save_project(path: str, state: ProjectState):
             _put(vol, "tetrahedra", state.volume_tetrahedra, np.int64)
             if state.volume_surface_faces is not None:
                 _put(vol, "surface_faces", state.volume_surface_faces, np.int64)
+            if state.volume_regions is not None:
+                _put(vol, "regions", state.volume_regions, np.int32)
 
         if state.mesher_name:
             m = f.create_group("mesher")
@@ -106,7 +112,8 @@ def save_project(path: str, state: ProjectState):
         settings.attrs.update(
             normal_angle=float(state.normal_angle),
             current_partition=int(state.current_partition or 0),
-            next_partition_id=int(state.next_partition_id))
+            next_partition_id=int(state.next_partition_id),
+            mesh_mode=state.mesh_mode)
         if state.meshed_components is not None:
             settings.attrs["meshed_components"] = np.asarray(state.meshed_components, dtype=np.int8)
 
@@ -146,6 +153,8 @@ def load_project(path: str) -> ProjectState:
             state.volume_tetrahedra = vol["tetrahedra"][()]
             if "surface_faces" in vol:
                 state.volume_surface_faces = vol["surface_faces"][()]
+            if "regions" in vol:
+                state.volume_regions = vol["regions"][()]
 
         if "source" in f:
             state.source_name = str(f["source"].attrs["name"])
@@ -161,4 +170,5 @@ def load_project(path: str) -> ProjectState:
         state.next_partition_id = int(s["next_partition_id"])
         if "meshed_components" in s:
             state.meshed_components = np.asarray(s["meshed_components"], dtype=bool)
+        state.mesh_mode = str(s.get("mesh_mode", "conforming"))
         return state

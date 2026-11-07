@@ -74,11 +74,11 @@ class PreProcCtrl(QObject):
         print(f"Loaded project {file_path}")
         return ""
 
-    def take_mesh_result(self, result, face_map):
+    def take_mesh_result(self, result, face_map, regions=None):
         """Called by MeshingCtrl when a mesher finished: the input surface and
         the view stay, only the volume is replaced."""
         project_ops.take_mesh_result(self.__project, result.vertices, result.triangles,
-                                     result.tetrahedra, face_map)
+                                     result.tetrahedra, face_map, regions)
         v = self.__project.volume
         self.__scene_ctrl.add_volume_unstructured_mesh(v.vertices, v.tetrahedra)
         self.__scene_ctrl.add_volume_surface(v.vertices, v.triangles, self.__project.volume_face_map)

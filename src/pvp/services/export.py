@@ -36,11 +36,21 @@ def collect_bc_groups(partitions: Partitions, n_triangles: int,
     return groups
 
 
+def region_name(component: int) -> str:
+    """Export name of a body, matching "Part n" in the Input Data tab."""
+    return f"Part_{component + 1}"
+
+
 def build_export_mesh(project: Project) -> ExportMesh:
     vol = project.volume
+    regions, names = None, []
+    if project.volume_regions is not None:
+        labels, regions = np.unique(project.volume_regions, return_inverse=True)
+        names = [region_name(int(c)) for c in labels]
     return ExportMesh(nodes=vol.vertices, tets=vol.tetrahedra, surface_tri=vol.triangles,
                       bc_groups=collect_bc_groups(project.partitions, len(vol.triangles),
-                                                  project.volume_partition_ids()))
+                                                  project.volume_partition_ids()),
+                      regions=regions, region_names=names)
 
 
 def export_summary(project: Project) -> dict:

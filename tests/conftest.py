@@ -17,3 +17,15 @@ def unit_cube():
     T = np.array([[int(v.nr) - 1 for v in e.vertices] for e in m.Elements3D()])
     F = np.array([[int(v.nr) - 1 for v in e.vertices] for e in m.Elements2D()])
     return P, T, F
+
+
+@pytest.fixture(scope="session")
+def two_cubes(unit_cube):
+    """Two unit cubes stacked along z, touching on z=1, as separate tet meshes
+    (no shared nodes): (points, tets, boundary tris, body per tet). The
+    boundary triangles double as the input surface (cube A's first)."""
+    P, T, F = unit_cube
+    n = len(P)
+    V = np.vstack([P, P + [0, 0, 1]])
+    return (V, np.vstack([T, T + n]), np.vstack([F, F + n]),
+            np.repeat(np.array([0, 1], dtype=np.int32), len(T)))

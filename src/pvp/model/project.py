@@ -23,6 +23,8 @@ class Project:
     volume: Mesh | None = None           # tet mesh (loaded or meshed)
     # Per volume boundary triangle: the surface triangle whose partition it gets
     volume_face_map: np.ndarray | None = None
+    # Per tet: the component (body) it belongs to; None = a single region
+    volume_regions: np.ndarray | None = None
     background: Mesh | None = None       # bounding box for fTetWild's sizing field
     partitions: Partitions = field(default_factory=Partitions)
     normal_angle: float = DEFAULT_NORMAL_ANGLE   # face-region angle of the selection tool
@@ -32,12 +34,15 @@ class Project:
     # Parameters of the last mesher run (saved in the project, prefilled in the UI)
     mesher_name:   str = ""
     mesher_params: dict = field(default_factory=dict)
+    # How several bodies are meshed: "conforming" or "per_body" (services/multibody.py)
+    mesh_mode:     str = "conforming"
 
     def start(self, name: str, surface: Mesh, source_path: str | None = None):
         """Replace everything with a new input surface. With source_path the
         input file is embedded; without it the previous source is kept."""
         self.name = name
         self.surface, self.volume, self.volume_face_map, self.background = surface, None, None, None
+        self.volume_regions = None
         self.set_components(component_labels(surface.triangles))
         if source_path is not None:
             p = Path(source_path)
@@ -61,14 +66,19 @@ class Project:
             return np.zeros(0, dtype=np.int64)
         return np.flatnonzero(self.meshed_components[self.surface_components])
 
-    def set_volume(self, volume: Mesh, face_map):
+    def set_volume(self, volume: Mesh, face_map, regions=None):
         """Tet mesh of the surface; face_map: surface triangle per volume
-        boundary triangle (how the partitions carry over)."""
+        boundary triangle (how the partitions carry over); regions: body
+        (component label) per tet, None for a single region."""
         face_map = np.asarray(face_map, dtype=np.int64).ravel()
         if len(face_map) != len(volume.triangles):
             raise ValueError(f"face map has {len(face_map)} entries for "
                              f"{len(volume.triangles)} volume boundary triangles")
-        self.volume, self.volume_face_map = volume, face_map
+        if regions is not None:
+            regions = np.asarray(regions, dtype=np.int32).ravel()
+            if len(regions) != len(volume.tetrahedra):
+                raise ValueError(f"{len(regions)} regions for {len(volume.tetrahedra)} tets")
+        self.volume, self.volume_face_map, self.volume_regions = volume, face_map, regions
 
     def volume_partition_ids(self) -> np.ndarray | None:
         """Partition id per volume boundary triangle (None: no partitions)."""

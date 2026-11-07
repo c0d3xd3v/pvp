@@ -194,6 +194,11 @@ Item {
                 }
                 property var schema: MeshingCtrl.getSchema(currentMesher)
                 property var paramValues: ({})
+                // How several checked parts are meshed (services/multibody.py)
+                readonly property var meshModes: ["conforming", "per_body"]
+                property string meshMode: MeshingCtrl.getMeshMode()
+                readonly property int meshedBodies: meshToolsRoot.inputSummary.loaded
+                    ? meshToolsRoot.inputSummary.components.filter(c => c.meshed).length : 0
                 property bool meshing: false
                 property string stageLabel: ""
                 property real stageFraction: NaN
@@ -257,6 +262,7 @@ Item {
                     function onSessionChanged() {
                         meshingTab.schema =
                             MeshingCtrl.getSchema(meshingTab.currentMesher)
+                        meshingTab.meshMode = MeshingCtrl.getMeshMode()
                     }
                 }
 
@@ -311,6 +317,28 @@ Item {
                     }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: meshingTab.meshedBodies > 1
+                    Label {
+                        text: "Parts"
+                        Layout.preferredWidth: 130
+                        ToolTip.text: "Conforming: one mesh, shared nodes on contact faces, "
+                                      + "one element set per part.\nSeparate: each part meshed "
+                                      + "on its own, duplicate nodes on contact faces "
+                                      + "(couple them in the solver, e.g. *TIE)."
+                        ToolTip.visible: modeHover.hovered
+                        HoverHandler { id: modeHover }
+                    }
+                    ComboBox {
+                        Layout.fillWidth: true
+                        enabled: !meshingTab.meshing
+                        model: ["Conforming", "Separate"]
+                        currentIndex: Math.max(0, meshingTab.meshModes.indexOf(meshingTab.meshMode))
+                        onActivated: (i) => meshingTab.meshMode = meshingTab.meshModes[i]
+                    }
+                }
+
                 // Status row — appears whenever we have something to show
                 RowLayout {
                     Layout.fillWidth: true
@@ -354,7 +382,8 @@ Item {
                     onClicked: {
                         if (meshingTab.meshing) MeshingCtrl.cancelMesher()
                         else MeshingCtrl.runMesher(meshingTab.currentMesher,
-                                                   meshingTab.paramValues)
+                                                   meshingTab.paramValues,
+                                                   meshingTab.meshMode)
                     }
                 }
             }

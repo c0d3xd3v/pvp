@@ -8,7 +8,7 @@ numbering follows the Abaqus manual (CalculiX inherits it).
 import numpy as np
 
 from pvp.fileio.export_model import (
-    ExportMesh, add_midside_nodes, tri6_connectivity,
+    VOLUME_NAME, ExportMesh, add_midside_nodes, tri6_connectivity,
 )
 
 
@@ -56,11 +56,21 @@ def _write_nodes(f, nodes: np.ndarray) -> None:
         f.write(f"{i + 1}, {x:.17g}, {y:.17g}, {z:.17g}\n")
 
 
-def _write_elements(f, tet_conn: np.ndarray, elem_type: str, elset: str) -> None:
-    f.write(f"*ELEMENT, TYPE={elem_type}, ELSET={elset}\n")
-    for eid0 in range(tet_conn.shape[0]):
-        node_str = ", ".join(str(int(v) + 1) for v in tet_conn[eid0])
-        f.write(f"{eid0 + 1}, {node_str}\n")
+def _write_elements(f, mesh: ExportMesh, tet_conn: np.ndarray, elem_type: str) -> None:
+    """One *ELEMENT block per region (ELSET = region name). Element ids stay
+    the tet index + 1, so *SURFACE entries don't depend on the grouping. With
+    several regions an ELSET "Volume" collects them all."""
+    groups = mesh.region_groups()
+    for name, tets in groups:
+        f.write(f"*ELEMENT, TYPE={elem_type}, ELSET={name}\n")
+        for eid0 in tets:
+            node_str = ", ".join(str(int(v) + 1) for v in tet_conn[eid0])
+            f.write(f"{eid0 + 1}, {node_str}\n")
+    if mesh.regions is not None:
+        f.write(f"*ELSET, ELSET={VOLUME_NAME}\n")
+        names = [name for name, _ in groups]
+        for i in range(0, len(names), _NSET_WIDTH):
+            f.write(", ".join(names[i : i + _NSET_WIDTH]) + "\n")
 
 
 def _write_nset(f, name: str, node_ids_1based: np.ndarray, instance: str | None = None) -> None:
@@ -98,7 +108,7 @@ def write_inp_calculix(path: str, mesh: ExportMesh, quadratic: bool = False) -> 
     with open(path, "w") as f:
         f.write("*HEADING\nExported by pvp\n")
         _write_nodes(f, nodes)
-        _write_elements(f, tet_conn, elem_type, "Volume")
+        _write_elements(f, mesh, tet_conn, elem_type)
 
         for g in mesh.bc_groups:
             unique_nodes = np.unique(bc_tri_conn[g.triangles].ravel()) + 1
@@ -124,7 +134,7 @@ def write_inp_abaqus(path: str, mesh: ExportMesh, quadratic: bool = False) -> No
 
         f.write(f"*PART, NAME={_PART_NAME}\n")
         _write_nodes(f, nodes)
-        _write_elements(f, tet_conn, elem_type, "Volume")
+        _write_elements(f, mesh, tet_conn, elem_type)
         f.write("*END PART\n")
 
         f.write(f"*ASSEMBLY, NAME={_ASSEMBLY_NAME}\n")

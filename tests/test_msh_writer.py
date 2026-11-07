@@ -141,3 +141,21 @@ def test_quadratic_midside_lies_on_edge(tmp_path, cube_mesh):
         mids = pts[tet10[:, 4 + i]]
         expected = 0.5 * (pts[tet10[:, a]] + pts[tet10[:, b]])
         assert np.allclose(mids, expected), f"midside col {4 + i} off edge {(a, b)}"
+
+
+@pytest.mark.parametrize("writer", [write_msh_v2, write_msh_v4])
+def test_regions_become_physical_volumes(tmp_path, two_cubes, writer):
+    V, T, F, regions = two_cubes
+    mesh = ExportMesh(nodes=V, tets=T, surface_tri=F, bc_groups=[BCGroup("all", np.arange(len(F)))],
+                      regions=regions, region_names=["Part_1", "Part_2"])
+    path = tmp_path / "two.msh"
+    writer(str(path), mesh)
+    m = meshio.read(str(path))
+    tags = {name: tag for name, (tag, dim) in m.field_data.items() if dim == 3}
+    assert set(tags) == {"Part_1", "Part_2"}
+    phys = np.concatenate([d for cb, d in zip(m.cells, m.cell_data["gmsh:physical"])
+                           if cb.type == "tetra"])
+    tets = np.concatenate([cb.data for cb in m.cells if cb.type == "tetra"])
+    for name, label in (("Part_1", 0), ("Part_2", 1)):
+        assert np.array_equal(np.sort(tets[phys == tags[name]], axis=0),
+                              np.sort(T[regions == label], axis=0))

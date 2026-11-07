@@ -128,3 +128,19 @@ def test_only_checked_components_get_meshed_and_saved(tmp_path):
     project_ops.open_project_file(q, project_ops.save_project_file(p, str(tmp_path / "two")))
     assert list(q.meshed_components) == [False, True]
     assert np.array_equal(q.surface_components, component_labels(q.surface.triangles))
+
+
+def test_regions_carry_into_export_and_project_file(two_cubes, tmp_path):
+    V, T, F, regions = two_cubes
+    p = Project()
+    p.start("two", Mesh(vertices=V, triangles=F))
+    assert list(p.meshed_components) == [True, True]
+    project_ops.take_mesh_result(p, V, F, T, regions=regions)
+    assert np.array_equal(p.volume_face_map, np.arange(len(F)))   # per body, contact included
+    em = export.build_export_mesh(p)
+    assert em.region_names == ["Part_1", "Part_2"] and np.array_equal(em.regions, regions)
+
+    p.mesh_mode = "per_body"
+    q = Project()
+    project_ops.open_project_file(q, project_ops.save_project_file(p, str(tmp_path / "two")))
+    assert np.array_equal(q.volume_regions, regions) and q.mesh_mode == "per_body"
